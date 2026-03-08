@@ -4,8 +4,20 @@ from pathlib import Path
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from models.screened_stock import FilterResult, ScreenedStock
+from screener.config_loader import (
+    FundamentalsConfig,
+    OptionsConfig,
+    ScreenerConfig,
+    SectorsConfig,
+    TechnicalsConfig,
+    deep_merge,
+    format_validation_errors,
+    load_config,
+    load_preset,
+)
 
 
 PRESETS_DIR = Path(__file__).resolve().parent.parent / "config" / "presets"
@@ -144,3 +156,172 @@ class TestScreenedStock:
         assert f2 in failed
         assert f3 in failed
         assert f1 not in failed
+
+
+# ---------------------------------------------------------------------------
+# Config loader tests (Task 2)
+# ---------------------------------------------------------------------------
+
+
+class TestLoadPreset:
+    """Verify load_preset function reads preset YAML files correctly."""
+
+    def test_load_preset_moderate_via_function(self):
+        data = load_preset("moderate")
+        assert data["fundamentals"]["market_cap_min"] == 2000000000
+        assert data["preset"] == "moderate"
+
+    def test_load_preset_conservative_via_function(self):
+        data = load_preset("conservative")
+        assert data["fundamentals"]["market_cap_min"] == 10000000000
+
+    def test_load_preset_aggressive_via_function(self):
+        data = load_preset("aggressive")
+        assert data["fundamentals"]["market_cap_min"] == 500000000
+
+    def test_load_preset_invalid_name(self):
+        with pytest.raises(FileNotFoundError, match="yolo"):
+            load_preset("yolo")
+
+
+class TestDeepMerge:
+    """Verify recursive deep merge behavior."""
+
+    def test_deep_merge_flat(self):
+        base = {"a": 1, "b": 2}
+        overrides = {"b": 3, "c": 4}
+        result = deep_merge(base, overrides)
+        assert result == {"a": 1, "b": 3, "c": 4}
+
+    def test_deep_merge_nested(self):
+        base = {"a": {"x": 1, "y": 2}, "b": 3}
+        overrides = {"a": {"x": 10}}
+        result = deep_merge(base, overrides)
+        assert result == {"a": {"x": 10, "y": 2}, "b": 3}
+
+    def test_deep_merge_does_not_mutate_base(self):
+        base = {"a": {"x": 1}}
+        overrides = {"a": {"x": 10}}
+        deep_merge(base, overrides)
+        assert base["a"]["x"] == 1
+
+
+class TestLoadConfig:
+    """Verify load_config loads, merges, validates, and auto-generates."""
+
+    def test_load_valid_config(self, tmp_path):
+        """load_config with a valid screener.yaml returns ScreenerConfig with correct values."""
+        config_file = tmp_path / "screener.yaml"
+        config_file.write_text(
+            "preset: moderate\n"
+            "fundamentals:\n"
+            "  market_cap_min: 5000000000\n"
+        )
+        config = load_config(str(config_file))
+        assert isinstance(config, ScreenerConfig)
+        assert config.fundamentals.market_cap_min == 5000000000
+        assert config.preset == "moderate"
+
+    def test_deep_merge_overrides(self, tmp_path):
+        """Overriding one field keeps all other moderate preset values intact."""
+        config_file = tmp_path / "screener.yaml"
+        config_file.write_text(
+            "preset: moderate\n"
+            "fundamentals:\n"
+            "  market_cap_min: 5000000000\n"
+        )
+        config = load_config(str(config_file))
+        # Override took effect
+        assert config.fundamentals.market_cap_min == 5000000000
+        # Other moderate preset values preserved
+        assert config.fundamentals.debt_equity_max == 1.0
+        assert config.fundamentals.net_margin_min == 0
+        assert config.fundamentals.sales_growth_min == 5
+
+    def test_deep_merge_preserves_nested(self, tmp_path):
+        """Overriding one field in technicals does not clobber other technicals fields."""
+        config_file = tmp_path / "screener.yaml"
+        config_file.write_text(
+            "preset: moderate\n"
+            "technicals:\n"
+            "  price_max: 100\n"
+        )
+        config = load_config(str(config_file))
+        assert config.technicals.price_max == 100
+        # Other technicals preserved from preset
+        assert config.technicals.price_min == 10
+        assert config.technicals.avg_volume_min == 2000000
+        assert config.technicals.rsi_max == 60
+        assert config.technicals.above_sma200 is True
+
+    def test_auto_generate_missing_config(self, tmp_path):
+        """When screener.yaml does not exist, load_config auto-generates it with moderate preset."""
+        config_file = tmp_path / "screener.yaml"
+        assert not config_file.exists()
+
+        config = load_config(str(config_file))
+        # File was created
+        assert config_file.exists()
+        # Returns valid config with moderate defaults
+        assert isinstance(config, ScreenerConfig)
+        assert config.preset == "moderate"
+        assert config.fundamentals.market_cap_min == 2000000000
+
+    def test_preset_selection(self, tmp_path):
+        """screener.yaml with preset: conservative loads conservative values as base."""
+        config_file = tmp_path / "screener.yaml"
+        config_file.write_text("preset: conservative\n")
+        config = load_config(str(config_file))
+        assert config.preset == "conservative"
+        assert config.fundamentals.market_cap_min == 10000000000
+        assert config.fundamentals.debt_equity_max == 0.5
+
+    def test_validation_error_wrong_type(self, tmp_path):
+        """screener.yaml with fundamentals.market_cap_min: 'not_a_number' raises ValidationError."""
+        config_file = tmp_path / "screener.yaml"
+        config_file.write_text(
+            "preset: moderate\n"
+            "fundamentals:\n"
+            "  market_cap_min: not_a_number\n"
+        )
+        with pytest.raises(ValidationError):
+            load_config(str(config_file))
+
+    def test_validation_error_out_of_range(self, tmp_path):
+        """screener.yaml with fundamentals.debt_equity_max: -1 raises ValidationError."""
+        config_file = tmp_path / "screener.yaml"
+        config_file.write_text(
+            "preset: moderate\n"
+            "fundamentals:\n"
+            "  debt_equity_max: -1\n"
+        )
+        with pytest.raises(ValidationError):
+            load_config(str(config_file))
+
+    def test_validation_error_invalid_preset(self, tmp_path):
+        """screener.yaml with preset: 'yolo' raises ValidationError mentioning valid presets."""
+        config_file = tmp_path / "screener.yaml"
+        config_file.write_text("preset: yolo\n")
+        with pytest.raises(ValidationError, match="conservative.*moderate.*aggressive|preset"):
+            load_config(str(config_file))
+
+
+class TestFormatValidationErrors:
+    """Verify validation error formatting for user-friendly messages."""
+
+    def test_format_validation_errors(self):
+        """ValidationError errors are formatted with field name and human-readable message."""
+        try:
+            ScreenerConfig.model_validate({
+                "preset": "moderate",
+                "fundamentals": {"debt_equity_max": -1},
+                "technicals": {"price_min": 10, "price_max": 50, "avg_volume_min": 2000000, "rsi_max": 60, "above_sma200": True},
+                "options": {"optionable": True},
+                "sectors": {"include": [], "exclude": []},
+            })
+            pytest.fail("Expected ValidationError")
+        except ValidationError as e:
+            formatted = format_validation_errors(e)
+            assert "debt_equity_max" in formatted
+            # Should contain a human-readable message
+            assert len(formatted) > 10
