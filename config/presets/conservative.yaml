@@ -1,0 +1,17 @@
+preset: conservative
+fundamentals:
+  market_cap_min: 10000000000
+  debt_equity_max: 0.5
+  net_margin_min: 10
+  sales_growth_min: 10
+technicals:
+  price_min: 10
+  price_max: 50
+  avg_volume_min: 2000000
+  rsi_max: 60
+  above_sma200: true
+options:
+  optionable: true
+sectors:
+  include: []
+  exclude: []
