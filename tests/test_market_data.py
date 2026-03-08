@@ -2,7 +2,6 @@
 
 import logging as stdlib_logging
 from unittest.mock import MagicMock, patch, call
-from datetime import datetime, timedelta
 
 import pandas as pd
 import pytest
@@ -20,7 +19,7 @@ class TestComputeIndicators:
 
     def _make_bars(self, n: int, close_val: float = 100.0, volume_val: float = 1_000_000.0) -> pd.DataFrame:
         """Create a synthetic bar DataFrame with n rows."""
-        dates = pd.date_range(end=datetime.now(), periods=n, freq="B")
+        dates = pd.bdate_range(end="2026-03-06", periods=n)
         return pd.DataFrame(
             {"close": [close_val] * n, "volume": [volume_val] * n},
             index=dates,
@@ -34,7 +33,7 @@ class TestComputeIndicators:
 
     def test_avg_volume(self):
         """avg_volume should be the mean of all volume values."""
-        dates = pd.date_range(end=datetime.now(), periods=3, freq="B")
+        dates = pd.bdate_range(end="2026-03-06", periods=3)
         df = pd.DataFrame(
             {"close": [100.0, 101.0, 102.0], "volume": [1000.0, 2000.0, 3000.0]},
             index=dates,
@@ -45,7 +44,7 @@ class TestComputeIndicators:
     def test_rsi_with_sufficient_bars(self):
         """RSI(14) should be computed and be a float between 0-100 with 50+ bars."""
         # Use alternating prices to produce a non-trivial RSI
-        dates = pd.date_range(end=datetime.now(), periods=50, freq="B")
+        dates = pd.bdate_range(end="2026-03-06", periods=50)
         closes = [100 + (i % 5) * 2.0 for i in range(50)]
         df = pd.DataFrame(
             {"close": closes, "volume": [1_000_000.0] * 50},
@@ -78,7 +77,7 @@ class TestComputeIndicators:
     def test_above_sma200_true(self):
         """above_sma200 should be True when last close > SMA(200)."""
         # 200 bars at 100.0, then 10 bars at 200.0 -- SMA(200) will be < 200.0
-        dates = pd.date_range(end=datetime.now(), periods=210, freq="B")
+        dates = pd.bdate_range(end="2026-03-06", periods=210)
         closes = [100.0] * 200 + [200.0] * 10
         df = pd.DataFrame(
             {"close": closes, "volume": [1_000_000.0] * 210},
@@ -90,7 +89,7 @@ class TestComputeIndicators:
     def test_above_sma200_false(self):
         """above_sma200 should be False when last close < SMA(200)."""
         # 200 bars at 200.0, then 10 bars at 50.0 -- SMA(200) will be > 50.0
-        dates = pd.date_range(end=datetime.now(), periods=210, freq="B")
+        dates = pd.bdate_range(end="2026-03-06", periods=210)
         closes = [200.0] * 200 + [50.0] * 10
         df = pd.DataFrame(
             {"close": closes, "volume": [1_000_000.0] * 210},
@@ -129,7 +128,7 @@ class TestFetchDailyBars:
         """Create a mock barset response with multi-index DataFrame."""
         dfs = []
         for sym in symbols:
-            dates = pd.date_range(end=datetime.now(), periods=n_bars, freq="B")
+            dates = pd.bdate_range(end="2026-03-06", periods=n_bars)
             sym_df = pd.DataFrame(
                 {
                     "open": [100.0] * n_bars,
