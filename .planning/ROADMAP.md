@@ -60,12 +60,11 @@ Plans:
   3. The pipeline applies cheap Alpaca filters before expensive Finnhub filters to minimize API calls
   4. Each surviving stock has a wheel-suitability score based on premium yield potential, capital efficiency, and fundamental strength
   5. Results are returned sorted by score descending
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
-- [ ] 03-03: TBD
+- [ ] 03-01-PLAN.md -- All 10 filter functions, HV computation, stage runners, and hv_30 field on ScreenedStock
+- [ ] 03-02-PLAN.md -- Scoring engine (3 weighted components) and pipeline orchestrator (universe fetch, 3-stage flow, sort)
 
 ### Phase 4: Output and Display
 **Goal**: Users can see screening results in a clear, informative format with visibility into what was filtered and why
@@ -105,6 +104,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/2 | Complete | 2026-03-08 |
 | 2. Data Sources | 1/2 | In Progress|  |
-| 3. Screening Pipeline | 0/3 | Not started | - |
+| 3. Screening Pipeline | 0/2 | Not started | - |
 | 4. Output and Display | 0/1 | Not started | - |
 | 5. CLI and Integration | 0/2 | Not started | - |
