@@ -30,11 +30,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. User can override individual preset values in screener.yaml and the overrides take effect
   4. User receives clear, actionable error messages when screener.yaml contains invalid values (wrong types, out-of-range, missing required fields)
   5. Adding FINNHUB_API_KEY to .env makes it available to the screener without code changes
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
+- [ ] 01-01-PLAN.md -- Config loader with presets, Pydantic validation, and ScreenedStock data model
+- [ ] 01-02-PLAN.md -- Finnhub API key loading in credentials.py
 
 ### Phase 2: Data Sources
 **Goal**: The screener can fetch fundamental data from Finnhub and compute technical indicators from Alpaca bars, handling rate limits and missing data gracefully
