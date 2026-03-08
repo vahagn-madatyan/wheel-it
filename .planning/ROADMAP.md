@@ -47,7 +47,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- FinnhubClient with rate limiting, 429 retry, and metric fallback chains
+- [x] 02-01-PLAN.md -- FinnhubClient with rate limiting, 429 retry, and metric fallback chains
 - [ ] 02-02-PLAN.md -- Alpaca bar fetching and RSI(14)/SMA(200) indicator computation
 
 ### Phase 3: Screening Pipeline
