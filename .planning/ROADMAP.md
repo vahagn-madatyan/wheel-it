@@ -44,11 +44,11 @@ Plans:
   1. Screening 200+ symbols completes without hitting Finnhub 429 rate limit errors
   2. Symbols with missing or null Finnhub metric values (market cap, debt/equity, margins, growth) are handled gracefully via fallback key chains rather than crashing
   3. RSI(14) and SMA(200) values are computed correctly from Alpaca daily bars for any given symbol
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md -- FinnhubClient with rate limiting, 429 retry, and metric fallback chains
+- [ ] 02-02-PLAN.md -- Alpaca bar fetching and RSI(14)/SMA(200) indicator computation
 
 ### Phase 3: Screening Pipeline
 **Goal**: The screener filters a universe of stocks through fundamental, technical, and options-availability checks, then scores and ranks survivors for wheel suitability
