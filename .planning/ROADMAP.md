@@ -74,10 +74,11 @@ Plans:
   1. Screening results display as a formatted rich table showing symbol, price, volume, key metrics, and score
   2. A filter summary shows per-stage elimination counts (universe size, how many removed at each filter stage, final count)
   3. A progress indicator is visible during the screening run so users know the process is active during rate-limited API calls
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: TBD
+- [ ] 04-01-PLAN.md -- Rich results table with 10 columns, compact formatting, color-coded scores, and filter elimination summaries
+- [ ] 04-02-PLAN.md -- Progress callback factory and pipeline on_progress integration
 
 ### Phase 5: CLI and Integration
 **Goal**: Users can run the screener as a standalone command or as part of the strategy workflow, with safe symbol list updates that protect active positions
@@ -105,5 +106,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. Foundation | 2/2 | Complete | 2026-03-08 |
 | 2. Data Sources | 1/2 | In Progress|  |
 | 3. Screening Pipeline | 0/2 | Not started | - |
-| 4. Output and Display | 0/1 | Not started | - |
+| 4. Output and Display | 0/2 | Not started | - |
 | 5. CLI and Integration | 0/2 | Not started | - |
