@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-03-09T00:05:30.684Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-03-09T00:11:56.414Z"
 last_activity: 2026-03-09 -- Completed Plan 03-01 (Pipeline Filters)
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 6
-  completed_plans: 5
-  percent: 83
+  completed_plans: 6
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-07)
 
 ## Current Position
 
-Phase: 3 of 5 (Screening Pipeline)
-Plan: 1 of 2 in current phase
+Phase: 3 of 5 (Screening Pipeline) -- COMPLETE
+Plan: 2 of 2 in current phase
 Status: Executing
-Last activity: 2026-03-09 -- Completed Plan 03-01 (Pipeline Filters)
+Last activity: 2026-03-09 -- Completed Plan 03-02 (Scoring & Pipeline Orchestrator)
 
-Progress: [████████░░] 83%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Progress: [████████░░] 83%
 | Phase 01 P01 | 5 min | 2 tasks | 10 files |
 | Phase 02 P01 | 4 min | 3 tasks | 3 files |
 | Phase 03 P01 | 3 min | 1 tasks | 3 files |
+| Phase 03 P02 | 4 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,8 @@ Recent decisions affecting current work:
 - [Phase 03]: Filter functions are pure: take ScreenedStock + config, return FilterResult, never raise
 - [Phase 03]: market_cap stored in raw dollars; Finnhub millions conversion done in run_stage_2_filters
 - [Phase 03]: HV computation uses log returns with ddof=1 std dev, annualized by sqrt(252)
+- [Phase 03]: Scoring weights: capital efficiency 0.45, volatility 0.35, fundamentals 0.20 -- capital efficiency dominant for wheel strategy
+- [Phase 03]: None HV/fundamentals get neutral 0.5 score instead of elimination; min-max normalization falls back to 0.5 for degenerate cases
 
 ### Pending Todos
 
@@ -84,6 +87,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-09T00:05:30.682Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-03-09T00:11:56.412Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None

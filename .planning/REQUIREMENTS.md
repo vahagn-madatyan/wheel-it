@@ -20,8 +20,8 @@
 
 ### Scoring
 
-- [ ] **SCOR-01**: Screener scores each passing stock for wheel strategy suitability based on premium yield potential, capital efficiency, and fundamental strength
-- [ ] **SCOR-02**: Screener ranks results by score descending
+- [x] **SCOR-01**: Screener scores each passing stock for wheel strategy suitability based on premium yield potential, capital efficiency, and fundamental strength
+- [x] **SCOR-02**: Screener ranks results by score descending
 
 ### Configuration
 
@@ -93,8 +93,8 @@
 | FILT-08 | Phase 3 | Complete |
 | FILT-09 | Phase 3 | Complete |
 | FILT-10 | Phase 3 | Complete |
-| SCOR-01 | Phase 3 | Pending |
-| SCOR-02 | Phase 3 | Pending |
+| SCOR-01 | Phase 3 | Complete |
+| SCOR-02 | Phase 3 | Complete |
 | CONF-01 | Phase 1 | Complete |
 | CONF-02 | Phase 1 | Complete |
 | CONF-03 | Phase 1 | Complete |
