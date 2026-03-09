@@ -35,6 +35,7 @@ class ScreenedStock:
     rsi_14: Optional[float] = None
     sma_200: Optional[float] = None
     above_sma200: Optional[bool] = None
+    hv_30: Optional[float] = None
 
     # Options data (Phase 3)
     is_optionable: Optional[bool] = None
