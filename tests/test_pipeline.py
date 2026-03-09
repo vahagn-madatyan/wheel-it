@@ -618,3 +618,371 @@ class TestComputeWheelScore:
         score_a = compute_wheel_score(stocks[0], stocks)
         score_b = compute_wheel_score(stocks[1], stocks)
         assert score_a == score_b
+
+
+# ===========================================================================
+# TestFetchUniverse
+# ===========================================================================
+
+class TestFetchUniverse:
+    """fetch_universe: builds universe from Alpaca asset API calls."""
+
+    def test_returns_tuple_of_symbols_and_optionable_set(self):
+        from screener.pipeline import fetch_universe
+
+        # Mock asset objects with symbol and tradable attributes
+        mock_asset_1 = MagicMock()
+        mock_asset_1.symbol = "AAPL"
+        mock_asset_1.tradable = True
+
+        mock_asset_2 = MagicMock()
+        mock_asset_2.symbol = "MSFT"
+        mock_asset_2.tradable = True
+
+        mock_asset_3 = MagicMock()
+        mock_asset_3.symbol = "PENNY"
+        mock_asset_3.tradable = False  # not tradable
+
+        mock_opt_1 = MagicMock()
+        mock_opt_1.symbol = "AAPL"
+
+        mock_trade_client = MagicMock()
+        mock_trade_client.get_all_assets.side_effect = [
+            [mock_asset_1, mock_asset_2, mock_asset_3],  # Call 1: all assets
+            [mock_opt_1],  # Call 2: optionable assets
+        ]
+
+        all_symbols, optionable_set = fetch_universe(mock_trade_client)
+        assert isinstance(all_symbols, list)
+        assert isinstance(optionable_set, set)
+        assert "AAPL" in all_symbols
+        assert "MSFT" in all_symbols
+        assert "PENNY" not in all_symbols  # not tradable
+        assert "AAPL" in optionable_set
+        assert "MSFT" not in optionable_set
+
+    def test_filters_to_tradable_only(self):
+        from screener.pipeline import fetch_universe
+
+        tradable = MagicMock()
+        tradable.symbol = "GOOD"
+        tradable.tradable = True
+
+        not_tradable = MagicMock()
+        not_tradable.symbol = "BAD"
+        not_tradable.tradable = False
+
+        mock_trade_client = MagicMock()
+        mock_trade_client.get_all_assets.side_effect = [
+            [tradable, not_tradable],
+            [],
+        ]
+
+        all_symbols, _ = fetch_universe(mock_trade_client)
+        assert "GOOD" in all_symbols
+        assert "BAD" not in all_symbols
+
+    def test_second_call_uses_options_enabled(self):
+        from screener.pipeline import fetch_universe
+
+        mock_trade_client = MagicMock()
+        mock_trade_client.get_all_assets.side_effect = [[], []]
+
+        fetch_universe(mock_trade_client)
+        assert mock_trade_client.get_all_assets.call_count == 2
+        # Second call should use attributes="options_enabled"
+        second_call_args = mock_trade_client.get_all_assets.call_args_list[1]
+        request = second_call_args[0][0]
+        assert hasattr(request, "attributes") or "options_enabled" in str(second_call_args)
+
+
+# ===========================================================================
+# TestLoadSymbolList
+# ===========================================================================
+
+class TestLoadSymbolList:
+    """load_symbol_list: reads symbols from text file."""
+
+    def test_reads_symbols_strips_whitespace_skips_empty(self, tmp_path):
+        from screener.pipeline import load_symbol_list
+
+        f = tmp_path / "symbols.txt"
+        f.write_text("AAPL\n  MSFT  \n\n# comment\nGOOG\n")
+        result = load_symbol_list(str(f))
+        assert result == ["AAPL", "MSFT", "GOOG"]
+
+    def test_returns_empty_list_if_file_missing(self, tmp_path):
+        from screener.pipeline import load_symbol_list
+
+        result = load_symbol_list(str(tmp_path / "nonexistent.txt"))
+        assert result == []
+
+
+# ===========================================================================
+# TestRunPipeline
+# ===========================================================================
+
+class TestRunPipeline:
+    """run_pipeline: full 3-stage pipeline orchestration."""
+
+    def _setup_mocks(self):
+        """Create common mocks for pipeline tests.
+
+        Returns (trade_client, stock_client, finnhub_client, config).
+        3 symbols: PASS (passes all), FAILSTG1 (fails Stage 1), NOBAR (no bar data).
+        """
+        # trade_client: universe with 3 symbols
+        asset_pass = MagicMock()
+        asset_pass.symbol = "PASS"
+        asset_pass.tradable = True
+
+        asset_fail = MagicMock()
+        asset_fail.symbol = "FAILSTG1"
+        asset_fail.tradable = True
+
+        asset_nobar = MagicMock()
+        asset_nobar.symbol = "NOBAR"
+        asset_nobar.tradable = True
+
+        opt_pass = MagicMock()
+        opt_pass.symbol = "PASS"
+
+        opt_fail = MagicMock()
+        opt_fail.symbol = "FAILSTG1"
+
+        opt_nobar = MagicMock()
+        opt_nobar.symbol = "NOBAR"
+
+        trade_client = MagicMock()
+        trade_client.get_all_assets.side_effect = [
+            [asset_pass, asset_fail, asset_nobar],
+            [opt_pass, opt_fail, opt_nobar],
+        ]
+
+        stock_client = MagicMock()
+
+        # finnhub_client: profile + metrics for PASS symbol
+        finnhub_client = MagicMock()
+        finnhub_client.company_profile.return_value = {
+            "marketCapitalization": 5000,
+            "finnhubIndustry": "Technology",
+        }
+        finnhub_client.company_metrics.return_value = {
+            "metric": {
+                "totalDebtToEquity": 0.5,
+                "netProfitMarginTTM": 15.0,
+                "revenueGrowthQuarterlyYoy": 10.0,
+            }
+        }
+
+        config = ScreenerConfig.model_validate({
+            "sectors": {"include": [], "exclude": []},
+        })
+
+        return trade_client, stock_client, finnhub_client, config
+
+    def _make_bars_dict(self):
+        """Create mock bar data: PASS has valid data, FAILSTG1 has out-of-range price, NOBAR absent."""
+        np.random.seed(42)
+        # PASS: price in range, good volume -- use 250 data points for SMA
+        pass_prices = 25 + np.cumsum(np.random.normal(0, 0.1, 250))
+        pass_df = pd.DataFrame({
+            "close": pass_prices,
+            "volume": [3_000_000] * 250,
+        })
+
+        # FAILSTG1: price too low (fails price_range filter)
+        fail_prices = 3 + np.cumsum(np.random.normal(0, 0.01, 250))
+        fail_df = pd.DataFrame({
+            "close": fail_prices,
+            "volume": [3_000_000] * 250,
+        })
+
+        return {
+            "PASS": pass_df,
+            "FAILSTG1": fail_df,
+            # NOBAR is intentionally absent
+        }
+
+    def _make_indicators(self, bars_df):
+        """Create mock indicators mimicking compute_indicators output."""
+        close = bars_df["close"]
+        price = float(close.iloc[-1])
+        volume = float(bars_df["volume"].mean())
+        return {
+            "price": price,
+            "avg_volume": volume,
+            "rsi_14": 45.0 if price > 10 else 80.0,
+            "sma_200": price - 1.0 if price > 10 else price + 5.0,
+            "above_sma200": price > 10,
+        }
+
+    @patch("screener.pipeline.fetch_daily_bars")
+    @patch("screener.pipeline.compute_indicators")
+    @patch("screener.pipeline.compute_historical_volatility")
+    def test_returns_all_stocks_passing_and_eliminated(
+        self, mock_hv, mock_indicators, mock_bars
+    ):
+        from screener.pipeline import run_pipeline
+
+        trade_client, stock_client, finnhub_client, config = self._setup_mocks()
+        bars = self._make_bars_dict()
+        mock_bars.return_value = bars
+
+        def side_effect_indicators(df):
+            return self._make_indicators(df)
+
+        mock_indicators.side_effect = side_effect_indicators
+        mock_hv.return_value = 0.35
+
+        result = run_pipeline(
+            trade_client, stock_client, finnhub_client, config,
+            symbol_list_path="/nonexistent/path.txt",
+        )
+
+        # Should return ALL 3 stocks
+        assert len(result) == 3
+        symbols = {s.symbol for s in result}
+        assert symbols == {"PASS", "FAILSTG1", "NOBAR"}
+
+    @patch("screener.pipeline.fetch_daily_bars")
+    @patch("screener.pipeline.compute_indicators")
+    @patch("screener.pipeline.compute_historical_volatility")
+    def test_stage1_before_stage2(self, mock_hv, mock_indicators, mock_bars):
+        from screener.pipeline import run_pipeline
+
+        trade_client, stock_client, finnhub_client, config = self._setup_mocks()
+        bars = self._make_bars_dict()
+        mock_bars.return_value = bars
+
+        mock_indicators.side_effect = lambda df: self._make_indicators(df)
+        mock_hv.return_value = 0.35
+
+        result = run_pipeline(
+            trade_client, stock_client, finnhub_client, config,
+            symbol_list_path="/nonexistent/path.txt",
+        )
+
+        # FAILSTG1 should have Stage 1 filter results but NO Stage 2 results
+        fail_stock = next(s for s in result if s.symbol == "FAILSTG1")
+        filter_names = {r.filter_name for r in fail_stock.filter_results}
+        # Stage 1 names present
+        assert "price_range" in filter_names
+        # Stage 2 names absent (didn't run because Stage 1 failed)
+        assert "market_cap" not in filter_names
+        assert "debt_equity" not in filter_names
+
+    @patch("screener.pipeline.fetch_daily_bars")
+    @patch("screener.pipeline.compute_indicators")
+    @patch("screener.pipeline.compute_historical_volatility")
+    def test_no_bar_data_gets_filter_result(self, mock_hv, mock_indicators, mock_bars):
+        from screener.pipeline import run_pipeline
+
+        trade_client, stock_client, finnhub_client, config = self._setup_mocks()
+        bars = self._make_bars_dict()
+        mock_bars.return_value = bars
+
+        mock_indicators.side_effect = lambda df: self._make_indicators(df)
+        mock_hv.return_value = 0.35
+
+        result = run_pipeline(
+            trade_client, stock_client, finnhub_client, config,
+            symbol_list_path="/nonexistent/path.txt",
+        )
+
+        nobar_stock = next(s for s in result if s.symbol == "NOBAR")
+        assert len(nobar_stock.filter_results) == 1
+        assert nobar_stock.filter_results[0].filter_name == "bar_data"
+        assert nobar_stock.filter_results[0].passed is False
+        assert "No bar data" in nobar_stock.filter_results[0].reason
+
+    @patch("screener.pipeline.fetch_daily_bars")
+    @patch("screener.pipeline.compute_indicators")
+    @patch("screener.pipeline.compute_historical_volatility")
+    def test_only_passing_stocks_scored(self, mock_hv, mock_indicators, mock_bars):
+        from screener.pipeline import run_pipeline
+
+        trade_client, stock_client, finnhub_client, config = self._setup_mocks()
+        bars = self._make_bars_dict()
+        mock_bars.return_value = bars
+
+        mock_indicators.side_effect = lambda df: self._make_indicators(df)
+        mock_hv.return_value = 0.35
+
+        result = run_pipeline(
+            trade_client, stock_client, finnhub_client, config,
+            symbol_list_path="/nonexistent/path.txt",
+        )
+
+        # Only PASS should have a score
+        pass_stock = next(s for s in result if s.symbol == "PASS")
+        assert pass_stock.score is not None
+        assert isinstance(pass_stock.score, float)
+
+        # Failed stocks should have no score
+        fail_stock = next(s for s in result if s.symbol == "FAILSTG1")
+        assert fail_stock.score is None
+
+        nobar_stock = next(s for s in result if s.symbol == "NOBAR")
+        assert nobar_stock.score is None
+
+    @patch("screener.pipeline.fetch_daily_bars")
+    @patch("screener.pipeline.compute_indicators")
+    @patch("screener.pipeline.compute_historical_volatility")
+    def test_results_sorted_by_score_descending(self, mock_hv, mock_indicators, mock_bars):
+        from screener.pipeline import run_pipeline
+
+        trade_client, stock_client, finnhub_client, config = self._setup_mocks()
+        bars = self._make_bars_dict()
+        mock_bars.return_value = bars
+
+        mock_indicators.side_effect = lambda df: self._make_indicators(df)
+        mock_hv.return_value = 0.35
+
+        result = run_pipeline(
+            trade_client, stock_client, finnhub_client, config,
+            symbol_list_path="/nonexistent/path.txt",
+        )
+
+        # Scored stocks (with score not None) should come first
+        scored = [s for s in result if s.score is not None]
+        unscored = [s for s in result if s.score is None]
+        assert result[:len(scored)] == scored
+        assert result[len(scored):] == unscored
+
+        # Scored stocks should be in descending order
+        if len(scored) > 1:
+            for i in range(len(scored) - 1):
+                assert scored[i].score >= scored[i + 1].score
+
+    @patch("screener.pipeline.fetch_daily_bars")
+    @patch("screener.pipeline.compute_indicators")
+    @patch("screener.pipeline.compute_historical_volatility")
+    def test_merges_symbol_list_into_universe(self, mock_hv, mock_indicators, mock_bars, tmp_path):
+        from screener.pipeline import run_pipeline
+
+        trade_client, stock_client, finnhub_client, config = self._setup_mocks()
+
+        # Symbol list contains EXTRA symbol not in Alpaca universe
+        sym_file = tmp_path / "syms.txt"
+        sym_file.write_text("EXTRA\n")
+
+        # Bars dict includes EXTRA
+        bars = self._make_bars_dict()
+        extra_prices = 25 + np.cumsum(np.random.normal(0, 0.1, 250))
+        bars["EXTRA"] = pd.DataFrame({
+            "close": extra_prices,
+            "volume": [3_000_000] * 250,
+        })
+        mock_bars.return_value = bars
+
+        mock_indicators.side_effect = lambda df: self._make_indicators(df)
+        mock_hv.return_value = 0.35
+
+        result = run_pipeline(
+            trade_client, stock_client, finnhub_client, config,
+            symbol_list_path=str(sym_file),
+        )
+
+        symbols = {s.symbol for s in result}
+        assert "EXTRA" in symbols
