@@ -1,0 +1,504 @@
+"""Tests for screener.pipeline — filter functions, HV computation, and stage runners."""
+
+import logging as stdlib_logging
+import math
+from unittest.mock import MagicMock, patch
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from models.screened_stock import ScreenedStock, FilterResult
+from screener.config_loader import ScreenerConfig
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _make_stock(**kwargs) -> ScreenedStock:
+    """Create a ScreenedStock with custom fields set."""
+    stock = ScreenedStock.from_symbol(kwargs.pop("symbol", "TEST"))
+    for k, v in kwargs.items():
+        setattr(stock, k, v)
+    return stock
+
+
+def _default_config(**overrides) -> ScreenerConfig:
+    """Create a ScreenerConfig with defaults, applying overrides."""
+    return ScreenerConfig.model_validate(overrides) if overrides else ScreenerConfig()
+
+
+# ===========================================================================
+# TestFilterPriceRange
+# ===========================================================================
+
+class TestFilterPriceRange:
+    """filter_price_range: pass/fail/None cases."""
+
+    def test_price_within_range_passes(self):
+        from screener.pipeline import filter_price_range
+        stock = _make_stock(price=25.0)
+        config = _default_config()
+        result = filter_price_range(stock, config)
+        assert result.passed is True
+        assert result.filter_name == "price_range"
+        assert result.actual_value == 25.0
+        assert result.reason == ""
+
+    def test_price_below_min_fails(self):
+        from screener.pipeline import filter_price_range
+        stock = _make_stock(price=5.0)
+        config = _default_config()
+        result = filter_price_range(stock, config)
+        assert result.passed is False
+        assert result.actual_value == 5.0
+        assert result.threshold == config.technicals.price_min
+        assert "below" in result.reason.lower() or "min" in result.reason.lower()
+
+    def test_price_above_max_fails(self):
+        from screener.pipeline import filter_price_range
+        stock = _make_stock(price=100.0)
+        config = _default_config()
+        result = filter_price_range(stock, config)
+        assert result.passed is False
+        assert result.actual_value == 100.0
+        assert "above" in result.reason.lower() or "max" in result.reason.lower()
+
+    def test_price_none_fails(self):
+        from screener.pipeline import filter_price_range
+        stock = _make_stock(price=None)
+        config = _default_config()
+        result = filter_price_range(stock, config)
+        assert result.passed is False
+        assert "unavailable" in result.reason.lower()
+
+
+# ===========================================================================
+# TestFilterAvgVolume
+# ===========================================================================
+
+class TestFilterAvgVolume:
+    """filter_avg_volume: pass/fail/None cases."""
+
+    def test_volume_above_min_passes(self):
+        from screener.pipeline import filter_avg_volume
+        stock = _make_stock(avg_volume=3_000_000)
+        config = _default_config()
+        result = filter_avg_volume(stock, config)
+        assert result.passed is True
+        assert result.filter_name == "avg_volume"
+
+    def test_volume_below_min_fails(self):
+        from screener.pipeline import filter_avg_volume
+        stock = _make_stock(avg_volume=500_000)
+        config = _default_config()
+        result = filter_avg_volume(stock, config)
+        assert result.passed is False
+        assert result.actual_value == 500_000
+        assert result.threshold == config.technicals.avg_volume_min
+
+    def test_volume_none_fails(self):
+        from screener.pipeline import filter_avg_volume
+        stock = _make_stock(avg_volume=None)
+        config = _default_config()
+        result = filter_avg_volume(stock, config)
+        assert result.passed is False
+        assert "unavailable" in result.reason.lower()
+
+
+# ===========================================================================
+# TestFilterRSI
+# ===========================================================================
+
+class TestFilterRSI:
+    """filter_rsi: pass/fail/None cases."""
+
+    def test_rsi_below_max_passes(self):
+        from screener.pipeline import filter_rsi
+        stock = _make_stock(rsi_14=45.0)
+        config = _default_config()
+        result = filter_rsi(stock, config)
+        assert result.passed is True
+        assert result.filter_name == "rsi"
+
+    def test_rsi_above_max_fails(self):
+        from screener.pipeline import filter_rsi
+        stock = _make_stock(rsi_14=75.0)
+        config = _default_config()
+        result = filter_rsi(stock, config)
+        assert result.passed is False
+        assert result.actual_value == 75.0
+        assert result.threshold == config.technicals.rsi_max
+
+    def test_rsi_none_fails(self):
+        from screener.pipeline import filter_rsi
+        stock = _make_stock(rsi_14=None)
+        config = _default_config()
+        result = filter_rsi(stock, config)
+        assert result.passed is False
+        assert "unavailable" in result.reason.lower()
+
+
+# ===========================================================================
+# TestFilterSMA200
+# ===========================================================================
+
+class TestFilterSMA200:
+    """filter_sma200: pass/fail/None/disabled cases."""
+
+    def test_above_sma200_passes(self):
+        from screener.pipeline import filter_sma200
+        stock = _make_stock(above_sma200=True)
+        config = _default_config()
+        result = filter_sma200(stock, config)
+        assert result.passed is True
+        assert result.filter_name == "sma200"
+
+    def test_below_sma200_fails(self):
+        from screener.pipeline import filter_sma200
+        stock = _make_stock(above_sma200=False)
+        config = _default_config()
+        result = filter_sma200(stock, config)
+        assert result.passed is False
+
+    def test_sma200_none_fails(self):
+        from screener.pipeline import filter_sma200
+        stock = _make_stock(above_sma200=None)
+        config = _default_config()
+        result = filter_sma200(stock, config)
+        assert result.passed is False
+        assert "unavailable" in result.reason.lower()
+
+    def test_sma200_disabled_passes(self):
+        from screener.pipeline import filter_sma200
+        stock = _make_stock(above_sma200=False)
+        config = ScreenerConfig.model_validate({"technicals": {"above_sma200": False}})
+        result = filter_sma200(stock, config)
+        assert result.passed is True
+
+
+# ===========================================================================
+# TestFilterMarketCap
+# ===========================================================================
+
+class TestFilterMarketCap:
+    """filter_market_cap: pass/fail/None cases."""
+
+    def test_market_cap_above_min_passes(self):
+        from screener.pipeline import filter_market_cap
+        stock = _make_stock(market_cap=5_000_000_000)
+        config = _default_config()
+        result = filter_market_cap(stock, config)
+        assert result.passed is True
+        assert result.filter_name == "market_cap"
+
+    def test_market_cap_below_min_fails(self):
+        from screener.pipeline import filter_market_cap
+        stock = _make_stock(market_cap=500_000_000)
+        config = _default_config()
+        result = filter_market_cap(stock, config)
+        assert result.passed is False
+        assert result.actual_value == 500_000_000
+        assert result.threshold == config.fundamentals.market_cap_min
+
+    def test_market_cap_none_fails(self):
+        from screener.pipeline import filter_market_cap
+        stock = _make_stock(market_cap=None)
+        config = _default_config()
+        result = filter_market_cap(stock, config)
+        assert result.passed is False
+        assert "unavailable" in result.reason.lower()
+
+
+# ===========================================================================
+# TestFilterDebtEquity
+# ===========================================================================
+
+class TestFilterDebtEquity:
+    """filter_debt_equity: pass/fail/None cases."""
+
+    def test_debt_equity_below_max_passes(self):
+        from screener.pipeline import filter_debt_equity
+        stock = _make_stock(debt_equity=0.5)
+        config = _default_config()
+        result = filter_debt_equity(stock, config)
+        assert result.passed is True
+        assert result.filter_name == "debt_equity"
+
+    def test_debt_equity_above_max_fails(self):
+        from screener.pipeline import filter_debt_equity
+        stock = _make_stock(debt_equity=2.5)
+        config = _default_config()
+        result = filter_debt_equity(stock, config)
+        assert result.passed is False
+        assert result.actual_value == 2.5
+        assert result.threshold == config.fundamentals.debt_equity_max
+
+    def test_debt_equity_none_fails(self):
+        from screener.pipeline import filter_debt_equity
+        stock = _make_stock(debt_equity=None)
+        config = _default_config()
+        result = filter_debt_equity(stock, config)
+        assert result.passed is False
+        assert "unavailable" in result.reason.lower()
+
+
+# ===========================================================================
+# TestFilterNetMargin
+# ===========================================================================
+
+class TestFilterNetMargin:
+    """filter_net_margin: pass/fail/None cases."""
+
+    def test_net_margin_above_min_passes(self):
+        from screener.pipeline import filter_net_margin
+        stock = _make_stock(net_margin=10.0)
+        config = _default_config()
+        result = filter_net_margin(stock, config)
+        assert result.passed is True
+        assert result.filter_name == "net_margin"
+
+    def test_net_margin_below_min_fails(self):
+        from screener.pipeline import filter_net_margin
+        stock = _make_stock(net_margin=-5.0)
+        config = _default_config()
+        result = filter_net_margin(stock, config)
+        assert result.passed is False
+        assert result.actual_value == -5.0
+        assert result.threshold == config.fundamentals.net_margin_min
+
+    def test_net_margin_none_fails(self):
+        from screener.pipeline import filter_net_margin
+        stock = _make_stock(net_margin=None)
+        config = _default_config()
+        result = filter_net_margin(stock, config)
+        assert result.passed is False
+        assert "unavailable" in result.reason.lower()
+
+
+# ===========================================================================
+# TestFilterSalesGrowth
+# ===========================================================================
+
+class TestFilterSalesGrowth:
+    """filter_sales_growth: pass/fail/None cases."""
+
+    def test_sales_growth_above_min_passes(self):
+        from screener.pipeline import filter_sales_growth
+        stock = _make_stock(sales_growth=10.0)
+        config = _default_config()
+        result = filter_sales_growth(stock, config)
+        assert result.passed is True
+        assert result.filter_name == "sales_growth"
+
+    def test_sales_growth_below_min_fails(self):
+        from screener.pipeline import filter_sales_growth
+        stock = _make_stock(sales_growth=2.0)
+        config = _default_config()
+        result = filter_sales_growth(stock, config)
+        assert result.passed is False
+        assert result.actual_value == 2.0
+        assert result.threshold == config.fundamentals.sales_growth_min
+
+    def test_sales_growth_none_fails(self):
+        from screener.pipeline import filter_sales_growth
+        stock = _make_stock(sales_growth=None)
+        config = _default_config()
+        result = filter_sales_growth(stock, config)
+        assert result.passed is False
+        assert "unavailable" in result.reason.lower()
+
+
+# ===========================================================================
+# TestFilterSector
+# ===========================================================================
+
+class TestFilterSector:
+    """filter_sector: include/exclude/None cases."""
+
+    def test_sector_in_include_list_passes(self):
+        from screener.pipeline import filter_sector
+        stock = _make_stock(sector="Technology")
+        config = ScreenerConfig.model_validate({"sectors": {"include": ["Technology", "Healthcare"]}})
+        result = filter_sector(stock, config)
+        assert result.passed is True
+        assert result.filter_name == "sector"
+
+    def test_sector_case_insensitive_include(self):
+        from screener.pipeline import filter_sector
+        stock = _make_stock(sector="technology")
+        config = ScreenerConfig.model_validate({"sectors": {"include": ["Technology"]}})
+        result = filter_sector(stock, config)
+        assert result.passed is True
+
+    def test_empty_include_not_in_exclude_passes(self):
+        from screener.pipeline import filter_sector
+        stock = _make_stock(sector="Technology")
+        config = ScreenerConfig.model_validate({"sectors": {"include": [], "exclude": ["Utilities"]}})
+        result = filter_sector(stock, config)
+        assert result.passed is True
+
+    def test_sector_in_exclude_list_fails(self):
+        from screener.pipeline import filter_sector
+        stock = _make_stock(sector="Utilities")
+        config = ScreenerConfig.model_validate({"sectors": {"exclude": ["utilities"]}})
+        result = filter_sector(stock, config)
+        assert result.passed is False
+
+    def test_sector_none_fails(self):
+        from screener.pipeline import filter_sector
+        stock = _make_stock(sector=None)
+        config = _default_config()
+        result = filter_sector(stock, config)
+        assert result.passed is False
+        assert "unavailable" in result.reason.lower()
+
+
+# ===========================================================================
+# TestFilterOptionable
+# ===========================================================================
+
+class TestFilterOptionable:
+    """filter_optionable: in set/not in set/disabled cases."""
+
+    def test_symbol_in_optionable_set_passes(self):
+        from screener.pipeline import filter_optionable
+        stock = _make_stock(symbol="AAPL")
+        config = _default_config()
+        result = filter_optionable(stock, config, optionable_set={"AAPL", "MSFT"})
+        assert result.passed is True
+        assert result.filter_name == "optionable"
+
+    def test_symbol_not_in_optionable_set_fails(self):
+        from screener.pipeline import filter_optionable
+        stock = _make_stock(symbol="XYZ")
+        config = _default_config()
+        result = filter_optionable(stock, config, optionable_set={"AAPL", "MSFT"})
+        assert result.passed is False
+
+    def test_optionable_disabled_passes(self):
+        from screener.pipeline import filter_optionable
+        stock = _make_stock(symbol="XYZ")
+        config = ScreenerConfig.model_validate({"options": {"optionable": False}})
+        result = filter_optionable(stock, config, optionable_set=set())
+        assert result.passed is True
+
+
+# ===========================================================================
+# TestComputeHistoricalVolatility
+# ===========================================================================
+
+class TestComputeHistoricalVolatility:
+    """compute_historical_volatility: sufficient data / insufficient data."""
+
+    def test_hv_returns_annualized_float(self):
+        from screener.pipeline import compute_historical_volatility
+        # Generate 60 days of synthetic close prices with known pattern
+        np.random.seed(42)
+        prices = 100 * np.exp(np.cumsum(np.random.normal(0, 0.02, 60)))
+        df = pd.DataFrame({"close": prices})
+        result = compute_historical_volatility(df, window=30)
+        assert result is not None
+        assert isinstance(result, float)
+        assert result > 0
+        # Annualized HV should be in a reasonable range (0.01 to 5.0)
+        assert 0.01 < result < 5.0
+
+    def test_hv_returns_none_insufficient_data(self):
+        from screener.pipeline import compute_historical_volatility
+        # Only 20 data points, need window+1 = 31
+        df = pd.DataFrame({"close": [100 + i for i in range(20)]})
+        result = compute_historical_volatility(df, window=30)
+        assert result is None
+
+
+# ===========================================================================
+# TestRunStage1Filters
+# ===========================================================================
+
+class TestRunStage1Filters:
+    """run_stage_1_filters: orchestrates 4 Stage 1 filters."""
+
+    def test_all_pass_returns_true(self):
+        from screener.pipeline import run_stage_1_filters
+        stock = _make_stock(price=25.0, avg_volume=3_000_000, rsi_14=45.0, above_sma200=True)
+        config = _default_config()
+        result = run_stage_1_filters(stock, config)
+        assert result is True
+        assert len(stock.filter_results) == 4
+        assert all(r.passed for r in stock.filter_results)
+
+    def test_some_fail_returns_false_records_all(self):
+        from screener.pipeline import run_stage_1_filters
+        stock = _make_stock(price=5.0, avg_volume=3_000_000, rsi_14=75.0, above_sma200=True)
+        config = _default_config()
+        result = run_stage_1_filters(stock, config)
+        assert result is False
+        # Should still have 4 filter results (all run even when some fail)
+        assert len(stock.filter_results) == 4
+        filter_names = {r.filter_name for r in stock.filter_results}
+        assert "price_range" in filter_names
+        assert "avg_volume" in filter_names
+        assert "rsi" in filter_names
+        assert "sma200" in filter_names
+
+
+# ===========================================================================
+# TestRunStage2Filters
+# ===========================================================================
+
+class TestRunStage2Filters:
+    """run_stage_2_filters: fetches Finnhub data, populates fields, runs 6 filters."""
+
+    def test_all_pass_returns_true(self):
+        from screener.pipeline import run_stage_2_filters
+
+        stock = _make_stock(symbol="AAPL")
+        config = _default_config()
+
+        mock_finnhub = MagicMock()
+        mock_finnhub.company_profile.return_value = {
+            "marketCapitalization": 2800000,  # in millions
+            "finnhubIndustry": "Technology",
+        }
+        mock_finnhub.company_metrics.return_value = {
+            "metric": {
+                "totalDebtToEquity": 0.5,
+                "netProfitMarginTTM": 25.0,
+                "revenueGrowthQuarterlyYoy": 10.0,
+            }
+        }
+
+        optionable_set = {"AAPL"}
+        # Use a config that allows Technology sector
+        config_with_sectors = ScreenerConfig.model_validate({
+            "sectors": {"include": [], "exclude": []},
+        })
+
+        result = run_stage_2_filters(stock, config_with_sectors, mock_finnhub, optionable_set)
+        assert result is True
+        # Should have 6 filter results
+        assert len(stock.filter_results) == 6
+        # Verify Finnhub data was populated on the stock
+        assert stock.market_cap == 2_800_000_000_000  # 2800000 * 1_000_000
+        assert stock.debt_equity == 0.5
+        assert stock.net_margin == 25.0
+        assert stock.sales_growth == 10.0
+        assert stock.sector == "Technology"
+
+    def test_empty_profile_fails_all(self):
+        from screener.pipeline import run_stage_2_filters
+
+        stock = _make_stock(symbol="INVALID")
+        config = _default_config()
+
+        mock_finnhub = MagicMock()
+        mock_finnhub.company_profile.return_value = {}
+        mock_finnhub.company_metrics.return_value = {"metric": {}}
+
+        result = run_stage_2_filters(stock, config, mock_finnhub, set())
+        assert result is False
+        # Should still have filter results recorded
+        failed = [r for r in stock.filter_results if not r.passed]
+        assert len(failed) > 0
