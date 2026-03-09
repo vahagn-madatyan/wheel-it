@@ -3,17 +3,79 @@
 from __future__ import annotations
 
 import logging as stdlib_logging
-from typing import Optional
+from contextlib import contextmanager
+from typing import Callable, Optional
 
 from rich.box import ROUNDED, SIMPLE_HEAVY
 from rich.console import Console
 from rich.panel import Panel
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+    TimeRemainingColumn,
+)
 from rich.table import Table
 
 from models.screened_stock import FilterResult, ScreenedStock
 
 _default_console = Console()
 logger = stdlib_logging.getLogger(__name__)
+
+ProgressCallback = Callable[[str, int, int], None]
+
+
+# ---------------------------------------------------------------------------
+# Progress indicator
+# ---------------------------------------------------------------------------
+
+
+@contextmanager
+def progress_context(console: Console | None = None):
+    """Context manager yielding a progress callback for pipeline stages.
+
+    The yielded callback has the signature::
+
+        callback(stage: str, current: int, total: int, symbol: str | None = None)
+
+    Each unique *stage* name creates a new Rich progress bar.  Subsequent
+    calls with the same *stage* update the existing bar.  When *symbol* is
+    provided, it is shown alongside the stage description.
+
+    Args:
+        console: Optional Rich Console for output.  Falls back to module
+            default if not provided.
+
+    Yields:
+        A callable matching the ``on_progress`` signature expected by
+        :func:`screener.pipeline.run_pipeline`.
+    """
+    console = console or _default_console
+    progress = Progress(
+        SpinnerColumn(),
+        TextColumn("{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        TimeRemainingColumn(),
+        console=console,
+    )
+    tasks: dict[str, int] = {}
+
+    def callback(
+        stage: str,
+        current: int,
+        total: int,
+        symbol: str | None = None,
+    ) -> None:
+        desc = f"{stage} [dim]({symbol})[/dim]" if symbol else stage
+        if stage not in tasks:
+            tasks[stage] = progress.add_task(desc, total=total)
+        progress.update(tasks[stage], completed=current, description=desc)
+
+    with progress:
+        yield callback
 
 
 # ---------------------------------------------------------------------------

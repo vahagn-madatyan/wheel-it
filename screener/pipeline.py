@@ -11,6 +11,7 @@ Stage 3: score survivors and sort.
 
 import logging as stdlib_logging
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 import pandas as pd
@@ -755,6 +756,7 @@ def run_pipeline(
     finnhub_client: FinnhubClient,
     config: ScreenerConfig,
     symbol_list_path: str = "config/symbol_list.txt",
+    on_progress: Callable | None = None,
 ) -> list[ScreenedStock]:
     """Run the full 3-stage screening pipeline.
 
@@ -773,10 +775,18 @@ def run_pipeline(
         finnhub_client: FinnhubClient for fundamental data.
         config: ScreenerConfig with all filter thresholds.
         symbol_list_path: Path to existing symbol list to merge.
+        on_progress: Optional callback ``(stage, current, total, symbol=None)``
+            called at each pipeline stage boundary.  When *None* (default),
+            the pipeline runs silently (backward compatible).
 
     Returns:
         All ScreenedStock objects (passing + eliminated), sorted by score descending.
     """
+
+    def _progress(stage: str, current: int, total: int, symbol: str | None = None) -> None:
+        if on_progress:
+            on_progress(stage, current, total, symbol=symbol)
+
     # Step 1: Fetch universe
     all_symbols, optionable_set = fetch_universe(trade_client)
 
@@ -787,10 +797,11 @@ def run_pipeline(
 
     # Step 3: Fetch daily bars for the entire universe
     bars = fetch_daily_bars(stock_client, universe, num_bars=250, batch_size=20)
+    _progress("Fetching Alpaca bars", len(universe), len(universe))
 
     # Step 4: Build ScreenedStock objects and populate indicators
     stocks: list[ScreenedStock] = []
-    for sym in universe:
+    for i, sym in enumerate(universe):
         stock = ScreenedStock.from_symbol(sym)
 
         if sym in bars:
@@ -814,9 +825,11 @@ def run_pipeline(
             continue
 
         # Step 5: Filter stages
+        _progress("Filtering Stage 1", i + 1, len(universe))
         stage1_passed = run_stage_1_filters(stock, config)
 
         if stage1_passed:
+            _progress("Fetching Finnhub data", i + 1, len(universe), symbol=sym)
             run_stage_2_filters(stock, config, finnhub_client, optionable_set)
 
         stocks.append(stock)
@@ -825,6 +838,7 @@ def run_pipeline(
     passing = [s for s in stocks if s.passed_all_filters]
     for stock in passing:
         stock.score = compute_wheel_score(stock, passing)
+    _progress("Scoring", len(passing), len(passing))
 
     logger.info(
         "Pipeline complete: %d total, %d passing, %d eliminated",
