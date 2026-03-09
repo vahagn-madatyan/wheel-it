@@ -502,3 +502,119 @@ class TestRunStage2Filters:
         # Should still have filter results recorded
         failed = [r for r in stock.filter_results if not r.passed]
         assert len(failed) > 0
+
+
+# ===========================================================================
+# Scoring helpers
+# ===========================================================================
+
+def _make_scored_stocks(specs: list[dict]) -> list[ScreenedStock]:
+    """Build a list of ScreenedStock objects for scoring tests.
+
+    Each spec dict is passed to _make_stock. Returns the list for use
+    as ``all_passing_stocks`` parameter to ``compute_wheel_score``.
+    """
+    return [_make_stock(**spec) for spec in specs]
+
+
+# ===========================================================================
+# TestComputeWheelScore
+# ===========================================================================
+
+class TestComputeWheelScore:
+    """compute_wheel_score: weighted scoring with 3 components."""
+
+    def test_score_returns_float_in_0_100(self):
+        from screener.pipeline import compute_wheel_score
+
+        stocks = _make_scored_stocks([
+            {"symbol": "A", "price": 20.0, "hv_30": 0.4, "net_margin": 15.0, "sales_growth": 10.0, "debt_equity": 0.3},
+            {"symbol": "B", "price": 40.0, "hv_30": 0.2, "net_margin": 5.0, "sales_growth": 5.0, "debt_equity": 0.8},
+        ])
+        score = compute_wheel_score(stocks[0], stocks)
+        assert isinstance(score, float)
+        assert 0 <= score <= 100
+
+    def test_score_capital_efficiency_higher_for_lower_price(self):
+        from screener.pipeline import compute_wheel_score
+
+        stocks = _make_scored_stocks([
+            {"symbol": "CHEAP", "price": 15.0, "hv_30": 0.3, "net_margin": 10.0, "sales_growth": 10.0, "debt_equity": 0.5},
+            {"symbol": "PRICEY", "price": 45.0, "hv_30": 0.3, "net_margin": 10.0, "sales_growth": 10.0, "debt_equity": 0.5},
+        ])
+        score_cheap = compute_wheel_score(stocks[0], stocks)
+        score_pricey = compute_wheel_score(stocks[1], stocks)
+        assert score_cheap > score_pricey
+
+    def test_score_volatility_higher_for_higher_hv(self):
+        from screener.pipeline import compute_wheel_score
+
+        stocks = _make_scored_stocks([
+            {"symbol": "HI_HV", "price": 25.0, "hv_30": 0.6, "net_margin": 10.0, "sales_growth": 10.0, "debt_equity": 0.5},
+            {"symbol": "LO_HV", "price": 25.0, "hv_30": 0.2, "net_margin": 10.0, "sales_growth": 10.0, "debt_equity": 0.5},
+        ])
+        score_hi = compute_wheel_score(stocks[0], stocks)
+        score_lo = compute_wheel_score(stocks[1], stocks)
+        assert score_hi > score_lo
+
+    def test_score_fundamentals_higher_for_strong_fundamentals(self):
+        from screener.pipeline import compute_wheel_score
+
+        stocks = _make_scored_stocks([
+            {"symbol": "STRONG", "price": 25.0, "hv_30": 0.3, "net_margin": 25.0, "sales_growth": 20.0, "debt_equity": 0.1},
+            {"symbol": "WEAK", "price": 25.0, "hv_30": 0.3, "net_margin": 2.0, "sales_growth": 1.0, "debt_equity": 0.9},
+        ])
+        score_strong = compute_wheel_score(stocks[0], stocks)
+        score_weak = compute_wheel_score(stocks[1], stocks)
+        assert score_strong > score_weak
+
+    def test_score_none_hv_gets_neutral_volatility(self):
+        from screener.pipeline import compute_wheel_score
+
+        stocks = _make_scored_stocks([
+            {"symbol": "NONE_HV", "price": 25.0, "hv_30": None, "net_margin": 10.0, "sales_growth": 10.0, "debt_equity": 0.5},
+            {"symbol": "HI_HV", "price": 25.0, "hv_30": 0.8, "net_margin": 10.0, "sales_growth": 10.0, "debt_equity": 0.5},
+            {"symbol": "LO_HV", "price": 25.0, "hv_30": 0.1, "net_margin": 10.0, "sales_growth": 10.0, "debt_equity": 0.5},
+        ])
+        score_none = compute_wheel_score(stocks[0], stocks)
+        # Should not error and should return a valid score
+        assert isinstance(score_none, float)
+        assert 0 <= score_none <= 100
+
+    def test_score_none_fundamentals_gets_neutral(self):
+        from screener.pipeline import compute_wheel_score
+
+        stocks = _make_scored_stocks([
+            {"symbol": "NO_FUND", "price": 25.0, "hv_30": 0.3, "net_margin": None, "sales_growth": None, "debt_equity": None},
+            {"symbol": "OTHER", "price": 30.0, "hv_30": 0.3, "net_margin": 10.0, "sales_growth": 10.0, "debt_equity": 0.5},
+        ])
+        score = compute_wheel_score(stocks[0], stocks)
+        assert isinstance(score, float)
+        assert 0 <= score <= 100
+
+    def test_score_weights_sum_to_one(self):
+        from screener.pipeline import WEIGHT_CAPITAL_EFFICIENCY, WEIGHT_VOLATILITY, WEIGHT_FUNDAMENTALS
+
+        total = WEIGHT_CAPITAL_EFFICIENCY + WEIGHT_VOLATILITY + WEIGHT_FUNDAMENTALS
+        assert abs(total - 1.0) < 1e-9
+
+    def test_score_single_stock_no_division_by_zero(self):
+        from screener.pipeline import compute_wheel_score
+
+        stocks = _make_scored_stocks([
+            {"symbol": "ONLY", "price": 30.0, "hv_30": 0.4, "net_margin": 15.0, "sales_growth": 10.0, "debt_equity": 0.3},
+        ])
+        score = compute_wheel_score(stocks[0], stocks)
+        assert isinstance(score, float)
+        assert 0 <= score <= 100
+
+    def test_score_identical_stocks_get_identical_scores(self):
+        from screener.pipeline import compute_wheel_score
+
+        stocks = _make_scored_stocks([
+            {"symbol": "A", "price": 25.0, "hv_30": 0.3, "net_margin": 10.0, "sales_growth": 10.0, "debt_equity": 0.5},
+            {"symbol": "B", "price": 25.0, "hv_30": 0.3, "net_margin": 10.0, "sales_growth": 10.0, "debt_equity": 0.5},
+        ])
+        score_a = compute_wheel_score(stocks[0], stocks)
+        score_b = compute_wheel_score(stocks[1], stocks)
+        assert score_a == score_b
