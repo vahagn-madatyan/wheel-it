@@ -26,7 +26,7 @@ dependencies = [
 
 [project.scripts]
 run-strategy = "scripts.run_strategy:main"
-# (optional) lets users just type `run-strategy` in the terminal
+run-screener = "scripts.run_screener:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
