@@ -788,7 +788,9 @@ def run_pipeline(
             on_progress(stage, current, total, symbol=symbol)
 
     # Step 1: Fetch universe
+    _progress("Fetching universe", 0, 2)
     all_symbols, optionable_set = fetch_universe(trade_client)
+    _progress("Fetching universe", 2, 2)
 
     # Step 2: Merge existing symbol list
     existing = load_symbol_list(symbol_list_path)
@@ -796,8 +798,13 @@ def run_pipeline(
     logger.info("Merged universe: %d symbols (including %d from symbol list)", len(universe), len(existing))
 
     # Step 3: Fetch daily bars for the entire universe
-    bars = fetch_daily_bars(stock_client, universe, num_bars=250, batch_size=20)
-    _progress("Fetching Alpaca bars", len(universe), len(universe))
+    bars = fetch_daily_bars(
+        stock_client,
+        universe,
+        num_bars=250,
+        batch_size=20,
+        on_progress=_progress,
+    )
 
     # Step 4: Build ScreenedStock objects and populate indicators
     stocks: list[ScreenedStock] = []

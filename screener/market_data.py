@@ -7,6 +7,7 @@ and NaN values gracefully.
 
 import logging as stdlib_logging
 from datetime import datetime, timedelta
+from typing import Callable
 
 import pandas as pd
 from alpaca.data.enums import Adjustment
@@ -24,6 +25,7 @@ def fetch_daily_bars(
     symbols: list[str],
     num_bars: int = 250,
     batch_size: int = 20,
+    on_progress: Callable[[str, int, int], None] | None = None,
 ) -> dict[str, pd.DataFrame]:
     """Fetch daily bars for symbols in batches, return dict of per-symbol DataFrames.
 
@@ -63,6 +65,9 @@ def fetch_daily_bars(
                 all_bars[sym] = sym_df
             except KeyError:
                 logger.debug("Symbol %s not found in bar response, skipping", sym)
+
+        if on_progress:
+            on_progress("Fetching daily bars", min(i + batch_size, len(symbols)), len(symbols))
 
     return all_bars
 

@@ -1091,7 +1091,7 @@ class TestRunPipelineProgress:
         stage_names = {call.args[0] for call in mock_progress.call_args_list}
 
         # Must include these stage names
-        assert "Fetching Alpaca bars" in stage_names
+        assert "Fetching universe" in stage_names
         assert "Filtering Stage 1" in stage_names
         assert "Scoring" in stage_names
         # Fetching Finnhub data should appear for PASS (which passes stage 1)
