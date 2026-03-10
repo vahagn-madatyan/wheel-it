@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 05-cli-and-integration
 source: [05-01-SUMMARY.md, 05-02-SUMMARY.md]
 started: 2026-03-10T16:10:00Z
@@ -60,5 +60,13 @@ skipped: 4
   reason: "User reported: ran but its just blank, if its processing something that we should have animated cli indicators"
   severity: major
   test: 1
-  artifacts: []
-  missing: []
+  root_cause: "pipeline.py run_pipeline() calls fetch_universe() and fetch_daily_bars() before any _progress() callback fires. The Rich progress bar context is active but no tasks are added until after all data is fetched. Lines 791-800: universe fetch (2 API calls) and bars fetch (batched across thousands of symbols) have zero progress reporting."
+  artifacts:
+    - path: "screener/pipeline.py"
+      issue: "fetch_universe (line 791) and fetch_daily_bars (line 799) make hundreds of API calls with no progress callbacks"
+    - path: "screener/market_data.py"
+      issue: "fetch_daily_bars batches symbols but doesn't report progress per batch"
+  missing:
+    - "Add _progress() calls inside fetch_universe() for the 2 Alpaca API calls"
+    - "Add _progress() calls inside fetch_daily_bars() per batch (20 symbols at a time)"
+    - "Show a spinner or indeterminate progress during initial universe fetch"
