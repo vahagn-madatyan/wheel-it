@@ -34,21 +34,21 @@
 
 - [x] **OUTP-01**: Screener displays results as a rich formatted table showing symbol, price, volume, key metrics, and score
 - [x] **OUTP-02**: Screener shows filter summary with per-stage elimination counts (universe -> price -> volume -> fundamentals -> technicals -> final)
-- [ ] **OUTP-03**: Screener can export filtered symbols to config/symbol_list.txt via --update-symbols flag
+- [x] **OUTP-03**: Screener can export filtered symbols to config/symbol_list.txt via --update-symbols flag
 - [x] **OUTP-04**: Screener shows progress indicator during rate-limited API calls
 
 ### CLI Integration
 
 - [ ] **CLI-01**: User can run screener standalone via `run-screener` CLI command
 - [ ] **CLI-02**: User can run screener before strategy via `run-strategy --screen` flag
-- [ ] **CLI-03**: Screener CLI accepts --update-symbols flag to write results to symbol_list.txt
+- [x] **CLI-03**: Screener CLI accepts --update-symbols flag to write results to symbol_list.txt
 - [ ] **CLI-04**: Screener CLI accepts --output-only flag (default) to display results without updating files
 
 ### Data & Safety
 
 - [x] **SAFE-01**: Finnhub API key is loaded from .env file (FINNHUB_API_KEY)
 - [x] **SAFE-02**: Finnhub API calls are rate-limited to respect 60 calls/min free tier limit
-- [ ] **SAFE-03**: Symbol list export protects actively-traded symbols (short puts, assigned shares, short calls) from removal
+- [x] **SAFE-03**: Symbol list export protects actively-traded symbols (short puts, assigned shares, short calls) from removal
 - [x] **SAFE-04**: Screener handles missing/null Finnhub metric values gracefully with fallback key chains
 
 ## v2 Requirements
@@ -101,15 +101,15 @@
 | CONF-04 | Phase 1 | Complete |
 | OUTP-01 | Phase 4 | Complete |
 | OUTP-02 | Phase 4 | Complete |
-| OUTP-03 | Phase 5 | Pending |
+| OUTP-03 | Phase 5 | Complete |
 | OUTP-04 | Phase 4 | Complete |
 | CLI-01 | Phase 5 | Pending |
 | CLI-02 | Phase 5 | Pending |
-| CLI-03 | Phase 5 | Pending |
+| CLI-03 | Phase 5 | Complete |
 | CLI-04 | Phase 5 | Pending |
 | SAFE-01 | Phase 1 | Complete |
 | SAFE-02 | Phase 2 | Complete |
-| SAFE-03 | Phase 5 | Pending |
+| SAFE-03 | Phase 5 | Complete |
 | SAFE-04 | Phase 2 | Complete |
 
 **Coverage:**
