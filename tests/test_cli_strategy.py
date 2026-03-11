@@ -2,11 +2,21 @@
 
 from unittest.mock import MagicMock, mock_open, patch
 
+from pydantic import ValidationError
 from typer.testing import CliRunner
 
+from screener.config_loader import ScreenerConfig
 from scripts.run_strategy import app
 
 runner = CliRunner()
+
+
+def _raise_validation_error(*a, **kw):
+    """Helper that raises a real Pydantic ValidationError."""
+    try:
+        ScreenerConfig.model_validate({"preset": "invalid"})
+    except ValidationError:
+        raise
 
 
 def test_strategy_help():
@@ -95,3 +105,25 @@ def test_screen_flag_runs_screener_first(
     mock_stage_summary.assert_called_once()
     # Strategy execution proceeded (sell_puts called)
     mock_sell_puts.assert_called_once()
+
+
+@patch("scripts.run_strategy.BrokerClient")
+@patch("scripts.run_strategy.setup_logger")
+@patch("scripts.run_strategy.StrategyLogger")
+@patch("scripts.run_strategy.load_config", side_effect=_raise_validation_error)
+def test_config_error_shows_panel_with_screen(
+    mock_load_config,
+    mock_strat_logger_cls,
+    mock_setup_logger,
+    mock_broker_cls,
+):
+    """ValidationError with --screen produces Rich Panel, not raw traceback."""
+    mock_strat_logger_cls.return_value = MagicMock()
+    mock_setup_logger.return_value = MagicMock()
+    mock_broker_cls.return_value = MagicMock()
+
+    result = runner.invoke(app, ["--screen"])
+    assert result.exit_code != 0
+    assert "Configuration Error" in result.output
+    assert "Traceback" not in result.output
+    assert "config/presets/" in result.output

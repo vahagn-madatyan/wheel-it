@@ -2,11 +2,21 @@
 
 from unittest.mock import MagicMock, patch
 
+from pydantic import ValidationError
 from typer.testing import CliRunner
 
+from screener.config_loader import ScreenerConfig
 from scripts.run_screener import app
 
 runner = CliRunner()
+
+
+def _raise_validation_error(*a, **kw):
+    """Helper that raises a real Pydantic ValidationError."""
+    try:
+        ScreenerConfig.model_validate({"preset": "invalid"})
+    except ValidationError:
+        raise
 
 
 def test_screener_help():
@@ -107,3 +117,13 @@ def test_verbose_shows_filter_breakdown(
     result = runner.invoke(app, ["--verbose"])
     assert result.exit_code == 0
     mock_breakdown.assert_called_once()
+
+
+@patch("scripts.run_screener.load_config", side_effect=_raise_validation_error)
+def test_config_error_shows_panel(mock_load_config):
+    """ValidationError produces Rich Panel, not raw traceback."""
+    result = runner.invoke(app, [])
+    assert result.exit_code != 0
+    assert "Configuration Error" in result.output
+    assert "Traceback" not in result.output
+    assert "config/presets/" in result.output
