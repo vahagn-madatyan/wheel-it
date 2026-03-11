@@ -17,6 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 3: Screening Pipeline** - All 10 filters, scoring engine, and pipeline orchestration with cheap-first ordering
 - [ ] **Phase 4: Output and Display** - Rich table rendering, filter elimination summary, and progress indicator
 - [ ] **Phase 5: CLI and Integration** - Standalone screener command, strategy integration flag, and position-safe symbol export
+- [ ] **Phase 6: Packaging & Tech Debt Cleanup** - Missing pyproject.toml dependencies, CLI error formatting, test isolation fixes
 
 ## Phase Details
 
@@ -97,10 +98,25 @@ Plans:
 - [x] 05-02-PLAN.md -- Standalone run-screener CLI, run-strategy Typer migration with --screen flag, cli_args.py deletion
 - [x] 05-03-PLAN.md -- Gap closure: Add progress callbacks to fetch_universe and fetch_daily_bars (UAT fix)
 
+### Phase 6: Packaging & Tech Debt Cleanup
+**Goal**: Fresh `pip install -e .` works without manual dependency installation, CLI shows human-readable config errors, and test suite runs cleanly without environment leaks
+**Depends on**: Phase 5
+**Requirements**: None (tech debt / integration gap closure)
+**Gap Closure**: Closes DEP-TA, DEP-PYYAML, DEP-PYDANTIC, ORPHAN-FMT from v1.0 audit
+**Success Criteria** (what must be TRUE):
+  1. Running `pip install -e .` in a clean virtualenv installs all required dependencies (ta, pyyaml, pydantic) without errors
+  2. Invalid screener.yaml values produce human-readable error messages (not raw Pydantic tracebacks) in both `run-screener` and `run-strategy --screen`
+  3. `pytest tests/test_credentials.py` passes regardless of whether `.env` contains real API keys
+  4. Stale deferred-items.md is cleaned up or removed
+**Plans**: 0 plans
+
+Plans:
+- (none yet)
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -109,3 +125,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 3. Screening Pipeline | 0/2 | Not started | - |
 | 4. Output and Display | 0/2 | Not started | - |
 | 5. CLI and Integration | 3/3 | Complete | 2026-03-10 |
+| 6. Packaging & Tech Debt Cleanup | 0/0 | Not started | - |
