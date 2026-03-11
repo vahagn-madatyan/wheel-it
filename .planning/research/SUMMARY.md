@@ -1,165 +1,181 @@
 # Project Research Summary
 
-**Project:** Wheeely — Stock Screening Module
-**Domain:** Financial data pipeline (screener) integrated with automated options wheel strategy bot
-**Researched:** 2026-03-07
+**Project:** Wheeely Stock Screener v1.1 -- Screener Fix + Covered Call Screening
+**Domain:** Options Wheel Strategy Screener (Financial Tooling / CLI)
+**Researched:** 2026-03-11
 **Confidence:** HIGH
 
 ## Executive Summary
 
-This project extends an existing, working options wheel strategy bot with a stock screening module that automatically identifies the best stocks to trade the wheel on. The problem is well-defined: fetch fundamental data (market cap, debt/equity, margins, growth) and technical indicators (RSI, SMA200), filter and score stocks for wheel suitability, and output a ranked symbol list the bot already consumes. Experts build this as a staged filter pipeline ordered from cheapest to most expensive API calls, because the dominant constraint is Finnhub's 60 calls/minute free-tier rate limit.
+Wheeely v1.1 is a fix-then-extend release for a wheel strategy stock screener that currently produces zero results due to two bugs: Finnhub returns `totalDebtToEquity` as a percentage (e.g., 150.0 for 1.5x) while the filter threshold is set to 1.0, and the 2M average volume minimum eliminates 85% of the universe before fundamentals even run. The fix is straightforward -- normalize the Finnhub metric and differentiate preset thresholds. Beyond the fix, four new capabilities are needed to complete the screener: HV-based volatility ranking, earnings calendar filtering, options chain OI/spread validation, and covered call screening. All four build on existing infrastructure with zero new dependencies.
 
-The recommended approach is to build the screener as a separate `screener/` package that shares only the `BrokerClient` and `state_manager` with the existing codebase, requiring modifications to just two existing files. The stack is conservative and nearly zero-risk: finnhub-python for fundamental data, the `ta` library for RSI/SMA indicators (both verified on PyPI), Pydantic for config validation (already installed), and `rich` for CLI output. All new dependencies are compatible with the existing dependency tree. No database is needed — the screener is a stateless batch pipeline that reads APIs and writes a text file.
+The recommended approach is to fix the pipeline first (diagnostic logging, then threshold/normalization corrections), then layer new filters in cost order: HV Rank computation in Stage 1 (free, uses existing bar data), earnings calendar in Stage 2 (one Finnhub API call for all symbols), options chain validation in a new Stage 2.5 (per-symbol Alpaca calls, run last to minimize volume), and covered call screening as a parallel pipeline reusing put-screening survivors. Every new capability uses packages already installed (alpaca-py 0.43.2, finnhub-python 2.4.27, numpy 2.4.2) and follows established codebase patterns (filter function signatures, BrokerClient dependency injection, cheap-first pipeline ordering).
 
-The primary risks are operational, not technical. Finnhub rate limits can silently produce incomplete results if not handled with proper rate limiting and cheap-first filter ordering. Finnhub's metric keys are inconsistent across symbols (TTM vs. Quarterly vs. Annual suffixes), requiring a fallback chain. Most critically, overwriting `symbol_list.txt` can orphan active positions — the screener must check current positions before removing any symbol from the list.
+The primary risks are: (1) Finnhub data quality issues extending beyond D/E to other metrics with inconsistent units or null values, (2) HV Rank diverging from true IV Rank around earnings events (acceptable if labeled honestly and combined with the earnings calendar filter), and (3) options chain API calls at scale pushing pipeline runtime beyond 10 minutes for large survivor sets. All three are mitigable through defensive coding practices documented in the pitfalls research.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The stack is low-risk because most dependencies are already installed or have zero conflicts with the existing project. Only two genuinely new packages are needed (finnhub-python and ta), plus rich for display.
+No new dependencies needed. All four capabilities use the existing installed stack. This is a significant finding -- it means zero dependency risk and zero setup friction.
 
-**Core technologies:**
-- **finnhub-python 2.4.27**: Fundamental data (market cap, financials) — only official Finnhub SDK; sole dependency is `requests` (already installed)
-- **ta 0.11.0**: Technical indicators (RSI, SMA) — pure Python with pandas/numpy I/O (both already installed). Do NOT use pandas-ta (removed from PyPI) or TA-Lib (requires C library)
-- **Pydantic 2.x**: Config validation for YAML screener settings — already installed via alpaca-py dependency chain
-- **PyYAML 6.0.3**: YAML config parsing — lightweight, no external dependencies
-- **rich 14.x**: CLI table display and progress bars during rate-limited screening runs
+**Core technologies (all existing, verified installed):**
+- **alpaca-py 0.43.2**: Option chain data, OI via `get_option_contracts()`, bid/ask/greeks/IV via `get_option_snapshot()` -- all methods already exist in BrokerClient
+- **finnhub-python 2.4.27**: Earnings calendar via `earnings_calendar()` method -- free tier, 60/min rate limit, already rate-limited by existing FinnhubClient
+- **numpy 2.4.2**: HV Rank percentile computation from rolling 30-day volatility over 252-day lookback -- uses only `np.std`, `np.log`, `np.sqrt`
+- **typer 0.24.1 + rich 14.3.3**: New `run-call-screener` CLI entry point following existing `run-screener` pattern
 
-**Critical version note:** pandas-ta has been removed from PyPI entirely. TA-Lib requires C library installation. The `ta` library (0.11.0) is the only viable pure-Python option for RSI/SMA.
+**What NOT to add:** scipy (Black-Scholes IV -- Alpaca already provides IV), yfinance (fragile scraper), any paid IV data service (ORATS, Barchart), Alpha Vantage (25 calls/day too restrictive), ratelimit PyPI package (last release 2019, existing manual throttle works).
+
+See `.planning/research/STACK.md` for full version matrix and API endpoint summary.
 
 ### Expected Features
 
-**Must have (table stakes):**
-- Fundamental filters (market cap, debt/equity, net margin, sales growth) via Finnhub
-- Technical filters (price range, volume, RSI(14), SMA(200)) via Alpaca bars + ta
-- Options availability check via Alpaca options API
-- YAML configuration with Pydantic validation
-- Preset profiles (conservative, moderate, aggressive)
-- CLI entry point (`run-screener`) and rich table output
-- Symbol list export to `config/symbol_list.txt`
-- Progress indicator during rate-limited Finnhub calls
-- Filter summary showing elimination counts per stage
+**Must have (table stakes -- all 6 ship in v1.1):**
+- **TS-1: Fix Filter Pipeline** -- Zero-result bug caused by D/E percentage format mismatch and 2M volume threshold. Priority zero.
+- **TS-2: HV Percentile (IV Rank proxy)** -- The #1 metric for options sellers. Computable from existing 250-bar data with no new API calls.
+- **TS-3: Earnings Calendar Check** -- Prevents selling puts into earnings (the #1 cause of wheel losses). Single bulk Finnhub API call.
+- **TS-4: Options Chain OI/Spread Filter** -- Validates that tradeable options actually exist. Reuses existing BrokerClient methods.
+- **TS-5: Covered Call Screening** -- Completes the wheel (put screening + call screening). Reuses existing `filter_options()` and `score_options()`.
+- **TS-6: Preset Differentiation** -- All three presets currently share identical technical thresholds. Must differentiate end-to-end.
 
-**Should have (differentiators):**
-- Wheel-specific scoring (premium yield, assignment probability, capital efficiency)
-- Active position protection when updating symbol list
-- Dry-run mode (`--dry-run` flag)
-- `run-strategy --screen` integration flag
+**Should have (ship if time allows):**
+- **DF-2: Sector Avoid/Prefer Lists** -- Near-zero effort, just YAML changes to existing preset files.
+- **DF-3: Premium Yield Display** -- Data already available from TS-4 options chain check, just add a column.
 
-**Defer (v2+):**
-- Options chain preview alongside screened stocks (high complexity)
-- Sector/industry diversification filter
-- Custom filter expressions
-- Result caching for Finnhub responses
+**Defer to v1.2+:**
+- HV vs IV comparison display, cost basis tracking from strategy logs, rolling recommendations.
 
-**Do NOT build:** Real-time streaming, backtesting, web dashboard, sentiment analysis, ML-based screening, multi-broker support.
+See `.planning/research/FEATURES.md` for full feature landscape, dependency graph, and API budget analysis.
 
 ### Architecture Approach
 
-The screener is a separate `screener/` package parallel to `core/`, isolating all new code from the working strategy pipeline. Only two existing files are modified: `broker_client.py` (add `get_stock_bars()`) and `run_strategy.py` (add `--screen` flag). The pipeline flows from config loading through universe construction, cheap Alpaca pre-filters, expensive Finnhub fundamental filters, technical indicator filters, scoring, and finally output/export. This filter ordering is not optional — it is the key architectural decision that keeps Finnhub API usage within free-tier limits.
+The architecture adds a new Stage 2.5 (options chain validation) to the existing 3-stage pipeline and a parallel covered call pipeline that consumes put-screening survivors. Four new modules are needed (`screener/volatility.py`, `screener/earnings.py`, `screener/options_filter.py`, `screener/call_screener.py`) plus modifications to 7 existing files. The total new code estimate is approximately 360-460 lines across the new modules.
 
 **Major components:**
-1. **screener/config.py** — YAML loading + Pydantic validation + preset merging
-2. **screener/finnhub_client.py** — Finnhub API wrapper with rate limiting and metric key fallback chains
-3. **screener/indicators.py** — RSI(14) and SMA(200) computation from daily OHLCV bars
-4. **screener/filters.py** — Pure filter functions (no API calls, mirrors `core/strategy.py` pattern)
-5. **screener/scorer.py** — Wheel-suitability scoring
-6. **screener/runner.py** — Pipeline orchestration wiring all components
-7. **screener/display.py** — Rich table rendering + symbol list file export with position protection
-8. **models/screened_stock.py** — Dataclass for screening results (mirrors `Contract` pattern)
+1. **screener/volatility.py** (NEW) -- Rolling 30-day HV over 252-day window, rank current vs range. ~40-50 LOC.
+2. **screener/earnings.py** (NEW) -- Bulk fetch earnings calendar, build symbol-to-date lookup, filter by proximity. ~60-80 LOC.
+3. **screener/options_filter.py** (NEW) -- Stage 2.5: validate ATM put OI and bid/ask spread via Alpaca options API. ~80-100 LOC.
+4. **screener/call_screener.py** (NEW) -- Covered call pipeline: reuses BrokerClient, Contract model, and strategy scoring functions. ~100-130 LOC.
+5. **screener/pipeline.py** (MODIFY) -- Primary modification target: wire HV rank into Stage 1, earnings into Stage 2, new Stage 2.5, pass full BrokerClient.
+6. **screener/config_loader.py** (MODIFY) -- Add VolatilityConfig, EarningsConfig, expand OptionsConfig with OI/spread fields.
+7. **config/presets/*.yaml** (MODIFY) -- Differentiated thresholds across all filter categories.
+
+**Key patterns to follow:** Filter function signature consistency (all return FilterResult), cheap-first pipeline ordering (HV rank before earnings before options chain), earnings data as lookup table (one API call, not per-symbol), BrokerClient passed to pipeline instead of individual sub-clients.
+
+See `.planning/research/ARCHITECTURE.md` for full data flow diagrams, interface definitions, and anti-patterns.
 
 ### Critical Pitfalls
 
-1. **Finnhub rate limit exhaustion** — Apply cheap Alpaca filters first to reduce Finnhub calls from ~1000 to ~200. Use a token-bucket rate limiter decorator on all Finnhub methods. Show a progress bar so users know screening is active.
-2. **Finnhub metric key inconsistency** — Build a fallback chain (TTM -> Quarterly -> Annual) for each metric. Treat missing metrics as "filter not applicable" (fail the filter), not "filter passed."
-3. **Symbol list overwrite destroying active positions** — Read current positions via `state_manager.update_state()` before writing. Never remove symbols with active positions. Default to display-only mode; require explicit `--update-symbols` flag to write.
-4. **Stale presets returning zero results** — Always show per-filter elimination counts. When zero results are returned, the filter summary tells users exactly which filter eliminated everything.
-5. **Market hours data inconsistency** — Always use daily close bars (`timeframe=1Day`) with end date set to previous market close. Never use intraday data for RSI/SMA.
+1. **Finnhub D/E is percentage-formatted, not ratio** -- The `totalDebtToEquity` metric returns 150.0 for 1.5x D/E. The threshold of 1.0 kills everything. Fix: add diagnostic logging for 5 known stocks, then normalize (divide by 100 if value > 10) or adjust threshold to match format.
+
+2. **None values treated as filter failure** -- Stocks missing Finnhub metrics (common for small/mid-caps, recent IPOs) are silently eliminated. Fix: implement soft-vs-hard filter categorization where None means "not enough data to disqualify" for non-critical metrics.
+
+3. **HV Rank is not IV Rank** -- HV captures past movement, IV captures expected future movement. They diverge around earnings and events. Fix: label honestly as "HV Rank" or "Volatility Rank (HV-based)", never "IV Rank". Combine with earnings calendar to flag event-driven opportunities.
+
+4. **avg_volume_min at 2M is too restrictive** -- Eliminates 85% of the universe including many wheel-suitable mid-caps. Fix: differentiate presets (Conservative 2M, Moderate 500K, Aggressive 200K) and rely on the new OI filter for options liquidity validation.
+
+5. **Earnings calendar dates are unreliable on free APIs** -- Finnhub has documented inaccuracy issues (GitHub Issue #528). Fix: use 14-day buffer instead of 7-day, flag "unknown" dates as caution rather than pass, prefer the bulk `/calendar/earnings` endpoint.
+
+See `.planning/research/PITFALLS.md` for all 13 pitfalls with phase-specific warnings.
 
 ## Implications for Roadmap
 
-Based on research, suggested phase structure:
+Based on research, the features have clear dependency chains that dictate a 4-phase structure. The critical path runs through the pipeline fix, config model updates, options chain integration, and finally covered call screening.
 
-### Phase 1: Foundation (Config + Data Models)
-**Rationale:** Everything depends on the config schema and data model shapes. Building these first establishes the contract for all other components.
-**Delivers:** `screener/config.py`, `models/screened_stock.py`, `config/screener.yaml`, preset YAML files
-**Addresses:** YAML configuration, preset profiles, Pydantic validation
-**Avoids:** Stale presets pitfall (by documenting assumptions in YAML), undefined data shapes causing rework
+### Phase 1: Debug and Fix Pipeline
 
-### Phase 2: Data Sources (API Clients)
-**Rationale:** The two external data sources (Finnhub and Alpaca bars) can be built in parallel and are needed by filters. This is the riskiest phase because it involves external API integration and rate limiting.
-**Delivers:** `screener/finnhub_client.py`, `core/broker_client.py` extension (get_stock_bars), `screener/indicators.py`
-**Uses:** finnhub-python, ta library, Alpaca SDK (existing)
-**Avoids:** Finnhub rate limit exhaustion (rate limiter built into client), metric key inconsistency (fallback chain in client)
+**Rationale:** Nothing else matters if zero stocks survive filtering. This is the blocking bug that makes the entire tool unusable. Must be Phase 1.
+**Delivers:** A working screener that produces results. Properly differentiated presets. Diagnostic tooling for Finnhub metric validation.
+**Addresses:** TS-1 (Fix Filter Pipeline), TS-6 (Preset Differentiation), DF-2 (Sector Avoid/Prefer Lists)
+**Avoids:** Pitfall 1 (D/E format mismatch), Pitfall 2 (None-as-failure), Pitfall 4 (volume too restrictive), Pitfall 10 (Finnhub unit inconsistencies), Pitfall 11 (identical preset technicals)
+**Stack:** No new dependencies. Config model changes (Pydantic), preset YAML updates.
 
-### Phase 3: Filtering + Scoring Pipeline
-**Rationale:** With data sources ready, filters and scoring are pure functions that can be built and tested against real API data. These are the core logic of the screener.
-**Delivers:** `screener/filters.py`, `screener/scorer.py`
-**Addresses:** Fundamental filters, technical filters, wheel-specific scoring
-**Avoids:** Market hours inconsistency (daily close bars only)
+### Phase 2: HV Rank + Earnings Calendar
 
-### Phase 4: Pipeline Orchestration
-**Rationale:** The runner wires data sources, filters, and scoring into the staged pipeline. Filter ordering (cheap first) is enforced here.
-**Delivers:** `screener/runner.py`
-**Implements:** The cheap-to-expensive filter pipeline architecture
-**Avoids:** Finnhub rate limit exhaustion (pipeline ordering)
+**Rationale:** These are the two cheapest new filters (HV Rank is zero API cost; earnings calendar is one API call total). They address the user's strategy Steps 1 and 2 and are independent of each other, enabling parallel development. Both must precede options chain work because they further narrow the survivor set before expensive per-symbol API calls.
+**Delivers:** Volatility ranking for premium richness assessment. Earnings proximity filtering to prevent selling into events. Both integrated into the pipeline and displayed in results.
+**Addresses:** TS-2 (HV Percentile), TS-3 (Earnings Calendar Check)
+**Avoids:** Pitfall 3 (HV != IV -- label honestly), Pitfall 5 (earnings date inaccuracy -- use buffer), Pitfall 7 (HV diverges around events -- combine with earnings filter), Pitfall 13 (bar count off-by-one -- increase to 300)
+**Stack:** numpy for HV computation, finnhub-python for earnings calendar. Both existing.
 
-### Phase 5: Output, CLI, and Integration
-**Rationale:** Output and CLI come last because they depend on the complete pipeline. Position protection must be implemented here to avoid the most critical pitfall.
-**Delivers:** `screener/display.py`, `scripts/run_screener.py`, `--screen` flag on `run-strategy`
-**Addresses:** Rich table output, symbol list export, progress indicator, filter summary, CLI entry point, strategy integration
-**Avoids:** Symbol list overwrite destroying active positions (position protection logic)
+### Phase 3: Options Chain OI/Spread Validation
+
+**Rationale:** Depends on a working pipeline (Phase 1) producing survivors and benefits from the reduced survivor count after HV rank and earnings filtering (Phase 2). This is the most API-intensive new stage and must run last in the pipeline. Establishes the BrokerClient integration pattern that Phase 4 (covered calls) also needs.
+**Delivers:** Stage 2.5 in the pipeline: validates that surviving stocks have tradeable options with sufficient OI and tight spreads. Eliminates stocks that are "optionable" in name but illiquid in practice.
+**Addresses:** TS-4 (Options Chain OI/Spread Filter), DF-3 (Premium Yield Display)
+**Avoids:** Pitfall 6 (rate limits at scale -- filter before fetching, restrict to target strikes/expirations), Pitfall 9 (spread filter too aggressive -- use relative spread percentage)
+**Stack:** alpaca-py `get_option_contracts()` and `get_option_snapshot()` (existing BrokerClient methods).
+
+### Phase 4: Covered Call Screening
+
+**Rationale:** Depends on Phase 3's options chain infrastructure and BrokerClient pipeline integration. This is the final feature that completes the wheel screener (put screening + call screening). The universe is small (only assigned positions, typically 1-5 stocks) so rate limiting is a non-issue.
+**Delivers:** `run-call-screener` CLI entry point. For each assigned position: best covered call contract with strike, DTE, premium yield, delta, and score. Separate Rich table output.
+**Addresses:** TS-5 (Covered Call Screening)
+**Avoids:** Pitfall 8 (different criteria than put screener -- separate config section, position-aware strike selection above cost basis)
+**Stack:** typer + rich for CLI (existing patterns), core/strategy.py for filter/score reuse.
 
 ### Phase Ordering Rationale
 
-- **Config and models first** because every other component depends on data shapes and filter thresholds
-- **Data sources before filters** because filters consume data from these sources; building them second allows early detection of API integration issues (the highest-risk area)
-- **Filters before orchestration** because pure filter logic can be validated independently before wiring into a pipeline
-- **Output last** because it is the lowest-risk component and depends on everything else being complete
-- **Position protection in the final phase** because it requires access to the existing `state_manager`, which is an integration concern best handled when the full pipeline is working
+- **Phase 1 before everything:** The pipeline is broken. No feature work has value until it produces results.
+- **Phase 2 before Phase 3:** HV rank and earnings are cheap filters that reduce the survivor set. Running expensive options chain API calls on a smaller set saves time and avoids rate limit issues.
+- **Phase 3 before Phase 4:** Covered call screening reuses the options chain fetch pattern and BrokerClient pipeline integration established in Phase 3.
+- **Parallel opportunities within phases:** HV rank and earnings calendar are fully independent (different APIs, different data). Config model updates can parallel the pipeline fix. Display updates come last in each phase.
 
 ### Research Flags
 
 Phases likely needing deeper research during planning:
-- **Phase 2 (Data Sources):** Finnhub API response shapes and metric key variations need hands-on exploration. The exact fallback key chains should be validated against real API responses for 10-20 diverse symbols. Alpaca's `get_stock_bars` API for multi-symbol batch requests may have undocumented pagination behavior.
-- **Phase 5 (Output + Integration):** The `state_manager.update_state()` integration for position protection needs careful examination of what data it returns and how to map it to symbol protection logic.
+- **Phase 1:** Needs a diagnostic spike to determine exact Finnhub D/E format (percentage vs ratio) and None-value prevalence across the Stage 1 survivor set. Research the actual data before committing to a normalization strategy.
+- **Phase 3:** Options chain API behavior under load needs validation. The exact Alpaca rate limit for paper accounts (200 req/min documented, but may vary) and the number of requests needed for 50+ survivors should be measured empirically.
 
 Phases with standard patterns (skip research-phase):
-- **Phase 1 (Foundation):** YAML + Pydantic config loading is well-documented; preset files are just YAML with predefined values.
-- **Phase 3 (Filtering + Scoring):** Pure filter functions following the existing `core/strategy.py` pattern. Standard comparisons against thresholds.
-- **Phase 4 (Orchestration):** Straightforward pipeline wiring, following the existing `core/execution.py` pattern.
+- **Phase 2:** Both HV rank computation and Finnhub earnings calendar are well-documented with verified API methods and clear implementation patterns from the stack research.
+- **Phase 4:** Pure application layer. Reuses existing BrokerClient, Contract, filter_options(), score_options(). No new API integration needed.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All packages verified on PyPI. Dependency compatibility confirmed against existing project. No version conflicts. |
-| Features | HIGH | Feature set derived from wheel strategy domain requirements and existing codebase analysis. Clear table stakes vs. differentiators. |
-| Architecture | HIGH | Module structure mirrors existing codebase patterns. Only 2 existing files modified. Clean separation of concerns. |
-| Pitfalls | MEDIUM-HIGH | Rate limiting and position protection pitfalls are well-understood. Finnhub metric key inconsistency needs hands-on validation to build exact fallback chains. |
+| Stack | HIGH | All packages verified installed via `pip list`. All API methods verified from SDK docs. Zero new dependencies. |
+| Features | HIGH | Feature set derived from user's strategy reference document and competitive analysis of wheel screeners. Clear table-stakes vs differentiator separation. |
+| Architecture | HIGH | Extends existing 3-stage pipeline with proven patterns. New modules follow established filter/pipeline conventions. All underlying API methods already exist in the codebase. |
+| Pitfalls | HIGH | Root cause of zero-result bug identified with code-level evidence. Finnhub data quality issues corroborated by GitHub issues and community reports. HV-vs-IV limitation is well-documented in options literature. |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Finnhub metric key mapping:** The exact camelCase keys and suffix variants (TTM, Quarterly, Annual, 5Y) need to be cataloged by querying the API for a diverse set of symbols. This should be done early in Phase 2 before building the fallback chain.
-- **Alpaca multi-symbol bar requests:** Whether Alpaca supports fetching bars for multiple symbols in a single request (vs. one-by-one) needs API verification. This affects performance significantly for 200+ symbols in Phase 2.
-- **Universe construction source:** How to get the initial list of all US optionable stocks is not fully specified. Alpaca's asset listing API with `status=active` and `asset_class=us_equity` is the likely approach, but options availability filtering specifics need validation.
-- **The `logging/` shadow:** Whether the `ta` and `finnhub-python` libraries break when imported from the project root needs a quick test early in Phase 1. If they do, a fix should be applied before building anything else.
+- **Finnhub D/E exact format:** Research strongly suggests percentage format based on elimination pattern, but a diagnostic spike with 5 known stocks is needed to confirm before choosing between normalization vs threshold adjustment.
+- **Finnhub None-value prevalence:** Unknown what percentage of Stage 1 survivors lack D/E data. This determines whether to implement pass-on-None or scoring-penalty approach.
+- **Free-tier indicative feed accuracy:** Alpaca's free options data uses the "indicative" feed (estimated values, not exchange quotes). Adequate for screening but actual bid/ask spreads may differ from live execution prices. No way to validate without comparing to paid OPRA feed.
+- **Earnings calendar coverage for small-caps:** Finnhub earnings dates are reliable for large-caps but accuracy for sub-$1B market cap companies is unverified. The 14-day buffer mitigates but does not eliminate this risk.
+- **HV Rank correlation with IV Rank:** The proxy is directionally correct but the actual correlation coefficient is unknown for this universe. Consider validating against Barchart's free IV Rank display for 10 stocks during Phase 2 implementation.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- PyPI package pages — finnhub-python 2.4.27, ta 0.11.0, rich 14.x version and dependency verification
-- Finnhub API documentation (finnhub.io/docs/api) — endpoint availability, rate limits (60/min free tier)
-- Existing codebase analysis — `core/`, `models/`, `config/`, `scripts/` module patterns and dependencies
-- Alpaca SDK documentation — options and stock data API capabilities
+- [Alpaca-py SDK Options Data Requests](https://alpaca.markets/sdks/python/api_reference/data/option/requests.html) -- OptionChainRequest parameters
+- [Alpaca-py SDK Data Models](https://alpaca.markets/sdks/python/api_reference/data/models.html) -- OptionsSnapshot, Quote, OptionsGreeks fields
+- [Alpaca Option Chain Endpoint](https://docs.alpaca.markets/reference/optionchain) -- REST endpoint parameters, rate limits
+- [Finnhub Earnings Calendar API](https://finnhub.io/docs/api/earnings-calendar) -- Response schema, free tier availability
+- [Finnhub Basic Financials API](https://finnhub.io/docs/api/company-basic-financials) -- Metric key documentation
+- [Finnhub Python SDK](https://github.com/Finnhub-Stock-API/finnhub-python) -- `earnings_calendar()` method signature
+- [Barchart: IV Rank vs IV Percentile](https://www.barchart.com/education/iv_rank_vs_iv_percentile) -- IV Rank computation methodology
+- [Schwab: Using Implied Volatility Percentiles](https://www.schwab.com/learn/story/using-implied-volatility-percentiles) -- IV Percentile vs IV Rank
 
 ### Secondary (MEDIUM confidence)
-- Finnhub metric key naming conventions — inferred from API documentation, needs live validation
-- Alpaca multi-symbol bar request behavior — inferred from SDK patterns, not directly tested
+- [Finnhub Earnings Calendar Accuracy Issue #528](https://github.com/finnhubio/Finnhub-API/issues/528) -- Documented date inaccuracy for specific stocks
+- [Finnhub Metric Data Quality Issue #337](https://github.com/finnhubio/Finnhub-API/issues/337) -- Metric value inconsistency reports
+- [Robot Wealth: Exploring the Finnhub API](https://robotwealth.com/finnhub-api/) -- D/E format analysis
+- [The Wheel Screener](https://medium.com/option-screener/new-metrics-on-the-wheel-screener-iv-rank-iv-percentile-next-earnings-date-and-last-earnings-07e3e5410ce9) -- Competitive feature analysis
+- [QuantWheel Screener Guide](https://quantwheel.com/learn/best-options-screeners/) -- Feature landscape
+- [Option Alpha Wheel Strategy Guide](https://optionalpha.com/blog/wheel-strategy) -- Domain context
+- [Apple D/E from MacroTrends](https://www.macrotrends.net/stocks/charts/AAPL/apple/debt-equity-ratio) -- Reference values for D/E verification
+
+### Tertiary (LOW confidence)
+- [TradingView: IV Rank VIXFix HV Proxy](https://www.tradingview.com/script/HyEYHf6d-IV-Rank-tasty-style-VIXFix-HV-Proxy/) -- Alternative HV proxy approach (community script)
+- [Alpaca Rate Limits](https://alpaca.markets/support/usage-limit-api-calls) -- 200 req/min for paper (may vary by plan)
 
 ---
-*Research completed: 2026-03-07*
+*Research completed: 2026-03-11*
 *Ready for roadmap: yes*
