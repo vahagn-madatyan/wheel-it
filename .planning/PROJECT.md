@@ -32,7 +32,7 @@ Automatically identify wheel-strategy-suitable stocks by combining fundamental h
 
 ### Active
 
-(None — next milestone requirements TBD via `/gsd:new-milestone`)
+(Defined in REQUIREMENTS.md for v1.1)
 
 ### Out of Scope
 
@@ -44,6 +44,19 @@ Automatically identify wheel-strategy-suitable stocks by combining fundamental h
 - AI/ML screening — rule-based filters are transparent and debuggable
 - Multi-broker support — only Alpaca is used
 
+## Current Milestone: v1.1 Screener Fix + Covered Calls
+
+**Goal:** Debug and fix the stock screening pipeline (zero stocks survive filtering), then add covered call screening for the wheel's second leg.
+
+**Target features:**
+- Diagnose and fix why the filter pipeline eliminates all stocks (debt_equity kills all 202 Stage 1 survivors, avg_volume at 2M is too aggressive)
+- Add IV Rank approximation using free data (historical volatility proxy)
+- Add earnings calendar check (free API)
+- Add options chain OI & bid/ask spread filtering
+- Add covered call screening (standalone `run-call-screener` CLI + integrated into `run-strategy`)
+- Update preset profiles with proper filter strictness differentiation
+- Add sector avoid/prefer lists to presets
+
 ## Context
 
 Shipped v1.0 with 5,843 LOC Python across 6 phases (12 plans).
@@ -51,6 +64,8 @@ Tech stack: Python 3.13, alpaca-py, finnhub-python, ta, pydantic, rich, typer, p
 193 tests passing, zero failures. 28/28 requirements satisfied.
 
 The screener combines Finnhub fundamentals and Alpaca technical data through a 3-stage pipeline (cheap Alpaca filters first, expensive Finnhub filters second, scoring third) to minimize API calls while respecting Finnhub's 60 calls/min rate limit.
+
+**v1.0 screening issue:** Running the screener produces zero results. The filter breakdown shows debt_equity removes ALL 202 Stage 1 survivors (possible Finnhub data issue or threshold mismatch). avg_volume at 2M also kills 10,758 stocks. The user has a working separate screener with a detailed strategy reference document defining proper thresholds and a multi-step screening approach (Finviz-style → IV Rank → Earnings → OI/Spread → Sector Diversification → Final Options Check).
 
 ## Key Decisions
 
@@ -66,5 +81,10 @@ The screener combines Finnhub fundamentals and Alpaca technical data through a 3
 | Position-safe export | Union of screened + protected symbols prevents removing active wheel positions | ✓ Good — critical safety feature |
 | TDD for filter/scoring code | Red-green cycle ensures correctness of scoring math and filter logic | ✓ Good — 60 filter tests, 9 scoring tests |
 
+| Debug first, then rebuild | User wants to understand why current pipeline fails before adding new features | — Pending |
+| Free APIs only | Approximate IV Rank from HV, use free earnings APIs instead of paid Barchart/ORATS | — Pending |
+| Filter strictness presets | Conservative/moderate/aggressive change thresholds, not strategy structure | — Pending |
+| Covered call CLI: both modes | Standalone `run-call-screener` + integrated into `run-strategy` flow | — Pending |
+
 ---
-*Last updated: 2026-03-11 after v1.0 milestone*
+*Last updated: 2026-03-11 after v1.1 milestone start*
