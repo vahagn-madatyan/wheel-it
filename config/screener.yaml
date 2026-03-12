@@ -1,0 +1,22 @@
+# Screener Configuration
+# ======================
+#
+# Select a preset profile as the base:
+#   conservative - tight fundamentals (large-cap, low debt)
+#   moderate     - Finviz baseline values (default)
+#   aggressive   - loose fundamentals (small-cap, higher debt OK)
+#
+# Override individual values below. Unspecified values
+# use the selected preset's defaults.
+#
+# Example overrides:
+#   fundamentals:
+#     market_cap_min: 5000000000
+#   technicals:
+#     price_max: 100
+#   sectors:
+#     exclude:
+#       - Utilities
+#       - Real Estate
+
+preset: moderate
