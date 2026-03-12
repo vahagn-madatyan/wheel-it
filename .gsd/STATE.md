@@ -15,4 +15,4 @@
 - None
 
 ## Next Action
-Execute T02: Fix None-handling in Stage 2 filters and update tests in slice S07.
+Execute T03: Add D/E normalization, overhaul presets, and verify end-to-end in slice S07.
