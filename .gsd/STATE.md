@@ -1,12 +1,12 @@
 # GSD State
 
-**Active Milestone:** None
+**Active Milestone:** M001 — Screener Fix + Covered Calls
 **Active Slice:** None
-**Phase:** idle
+**Phase:** complete
 **Requirements Status:** 0 active · 25 validated · 0 deferred · 0 out of scope
 
 ## Milestone Registry
-- ✅ **M001:** Screener Fix + Covered Calls (completed 2026-03-11)
+- ✅ **M001:** Screener Fix + Covered Calls
 
 ## Recent Decisions
 - None recorded
@@ -15,4 +15,4 @@
 - None
 
 ## Next Action
-M001 complete. Ready for next milestone planning.
+All milestones complete.
