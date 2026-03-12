@@ -5,13 +5,16 @@ fundamentals:
   net_margin_min: 10
   sales_growth_min: 10
 technicals:
-  price_min: 10
-  price_max: 50
-  avg_volume_min: 2000000
-  rsi_max: 60
+  price_min: 20
+  price_max: 100
+  avg_volume_min: 1000000
+  rsi_max: 55
   above_sma200: true
 options:
   optionable: true
 sectors:
   include: []
-  exclude: []
+  exclude:
+    - Biotechnology
+    - Cannabis
+    - "Oil & Gas Exploration & Production"

@@ -9,10 +9,10 @@
 - 🔄 **M001:** Screener Fix + Covered Calls
 
 ## Recent Decisions
-- None recorded
+- D/E normalization threshold is > 10 (strict greater-than) at pipeline boundary in run_stage_2_filters
 
 ## Blockers
 - None
 
 ## Next Action
-Execute T03: Add D/E normalization, overhaul presets, and verify end-to-end in slice S07.
+S07 complete (T01, T02, T03 all done). Plan next slice (S08) or validate milestone progress.

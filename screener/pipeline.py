@@ -597,6 +597,19 @@ def run_stage_2_filters(
     )
     stock.sector = profile.get("finnhubIndustry")
     stock.debt_equity = extract_metric(metrics, "debt_equity")
+    # D/E normalization (D009): Finnhub returns totalDebtToEquity as a
+    # percentage (e.g. 150.0 for 150% D/E).  Preset thresholds use ratio
+    # format (e.g. 1.5).  Convert at the boundary — values > 10 are
+    # almost certainly percentages.
+    if stock.debt_equity is not None and stock.debt_equity > 10:
+        raw_de = stock.debt_equity
+        stock.debt_equity = stock.debt_equity / 100
+        logger.debug(
+            "D/E normalization: %.2f → %.2f for %s",
+            raw_de,
+            stock.debt_equity,
+            stock.symbol,
+        )
     stock.net_margin = extract_metric(metrics, "net_margin")
     stock.sales_growth = extract_metric(metrics, "sales_growth")
 

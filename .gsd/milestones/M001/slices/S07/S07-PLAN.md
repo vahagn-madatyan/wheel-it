@@ -57,7 +57,7 @@
   - Verify: `pytest tests/test_pipeline.py -v` — all tests pass with updated assertions
   - Done when: Stocks with `None` Finnhub metrics pass Stage 2 filters and reach scoring, where `compute_wheel_score` gives them neutral 0.5 (D013)
 
-- [ ] **T03: Add D/E normalization, overhaul presets, and verify end-to-end** `est:45m`
+- [x] **T03: Add D/E normalization, overhaul presets, and verify end-to-end** `est:45m`
   - Why: Finnhub returns D/E as percentage (e.g. 150.0 for 150%) but thresholds are ratios (1.0). All three presets share identical technicals (avg_volume=2M kills 95% of stocks) and empty sector lists. Fixing D/E normalization (FIX-02), differentiating thresholds (FIX-04, PRES-01, PRES-02, PRES-03), and adding sector lists (PRES-04) completes the pipeline fix.
   - Files: `screener/pipeline.py`, `config/presets/conservative.yaml`, `config/presets/moderate.yaml`, `config/presets/aggressive.yaml`, `tests/test_pipeline.py`
   - Do: Add D/E percentage-to-ratio conversion in `run_stage_2_filters` after `extract_metric` (if value > 10, divide by 100, log debug). Add test for normalization. Rewrite all 3 presets with differentiated thresholds: avg_volume (1M/500K/200K), price ranges, RSI limits, SMA200 toggle, sector exclude lists. Run full test suite. Run `run-screener --preset moderate` for live verification.

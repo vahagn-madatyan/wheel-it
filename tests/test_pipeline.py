@@ -505,6 +505,123 @@ class TestRunStage2Filters:
 
 
 # ===========================================================================
+# TestDebtEquityNormalization
+# ===========================================================================
+
+class TestDebtEquityNormalization:
+    """D/E normalization in run_stage_2_filters: percentage → ratio conversion."""
+
+    def test_percentage_value_normalized_to_ratio(self):
+        """Finnhub D/E of 150.0 (percentage) should become 1.5 (ratio)."""
+        from screener.pipeline import run_stage_2_filters
+
+        stock = _make_stock(symbol="HIGHDE")
+        mock_finnhub = MagicMock()
+        mock_finnhub.company_profile.return_value = {
+            "marketCapitalization": 5000,
+            "finnhubIndustry": "Technology",
+        }
+        mock_finnhub.company_metrics.return_value = {
+            "metric": {
+                "totalDebtToEquity": 150.0,  # Finnhub percentage format
+                "netProfitMarginTTM": 15.0,
+                "revenueGrowthQuarterlyYoy": 10.0,
+            }
+        }
+        config = ScreenerConfig.model_validate({
+            "fundamentals": {"debt_equity_max": 2.0},
+            "sectors": {"include": [], "exclude": []},
+        })
+
+        run_stage_2_filters(stock, config, mock_finnhub, {"HIGHDE"})
+
+        # 150.0 / 100 = 1.5, which is ≤ 2.0 → should pass
+        assert stock.debt_equity == pytest.approx(1.5)
+        de_result = next(r for r in stock.filter_results if r.filter_name == "debt_equity")
+        assert de_result.passed is True
+
+    def test_ratio_value_not_modified(self):
+        """D/E of 0.8 (already a ratio) should not be divided by 100."""
+        from screener.pipeline import run_stage_2_filters
+
+        stock = _make_stock(symbol="LOWDE")
+        mock_finnhub = MagicMock()
+        mock_finnhub.company_profile.return_value = {
+            "marketCapitalization": 5000,
+            "finnhubIndustry": "Technology",
+        }
+        mock_finnhub.company_metrics.return_value = {
+            "metric": {
+                "totalDebtToEquity": 0.8,  # Already ratio format
+                "netProfitMarginTTM": 15.0,
+                "revenueGrowthQuarterlyYoy": 10.0,
+            }
+        }
+        config = ScreenerConfig.model_validate({
+            "sectors": {"include": [], "exclude": []},
+        })
+
+        run_stage_2_filters(stock, config, mock_finnhub, {"LOWDE"})
+
+        assert stock.debt_equity == pytest.approx(0.8)
+
+    def test_high_percentage_fails_strict_threshold(self):
+        """D/E of 500.0 (percentage) → 5.0 ratio, should fail debt_equity_max=2.0."""
+        from screener.pipeline import run_stage_2_filters
+
+        stock = _make_stock(symbol="VHIGHDE")
+        mock_finnhub = MagicMock()
+        mock_finnhub.company_profile.return_value = {
+            "marketCapitalization": 5000,
+            "finnhubIndustry": "Technology",
+        }
+        mock_finnhub.company_metrics.return_value = {
+            "metric": {
+                "totalDebtToEquity": 500.0,  # 500% → 5.0 ratio
+                "netProfitMarginTTM": 15.0,
+                "revenueGrowthQuarterlyYoy": 10.0,
+            }
+        }
+        config = ScreenerConfig.model_validate({
+            "fundamentals": {"debt_equity_max": 2.0},
+            "sectors": {"include": [], "exclude": []},
+        })
+
+        run_stage_2_filters(stock, config, mock_finnhub, {"VHIGHDE"})
+
+        assert stock.debt_equity == pytest.approx(5.0)
+        de_result = next(r for r in stock.filter_results if r.filter_name == "debt_equity")
+        assert de_result.passed is False
+
+    def test_boundary_value_10_triggers_normalization(self):
+        """D/E of exactly 10.0 is NOT normalized (threshold is > 10, not >=)."""
+        from screener.pipeline import run_stage_2_filters
+
+        stock = _make_stock(symbol="BOUND")
+        mock_finnhub = MagicMock()
+        mock_finnhub.company_profile.return_value = {
+            "marketCapitalization": 5000,
+            "finnhubIndustry": "Technology",
+        }
+        mock_finnhub.company_metrics.return_value = {
+            "metric": {
+                "totalDebtToEquity": 10.0,
+                "netProfitMarginTTM": 15.0,
+                "revenueGrowthQuarterlyYoy": 10.0,
+            }
+        }
+        config = ScreenerConfig.model_validate({
+            "fundamentals": {"debt_equity_max": 5.0},
+            "sectors": {"include": [], "exclude": []},
+        })
+
+        run_stage_2_filters(stock, config, mock_finnhub, {"BOUND"})
+
+        # 10.0 is NOT > 10, so it stays as 10.0 (extreme ratio, but not normalized)
+        assert stock.debt_equity == pytest.approx(10.0)
+
+
+# ===========================================================================
 # Scoring helpers
 # ===========================================================================
 

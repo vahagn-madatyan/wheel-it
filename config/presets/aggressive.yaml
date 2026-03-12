@@ -1,15 +1,15 @@
 preset: aggressive
 fundamentals:
   market_cap_min: 500000000
-  debt_equity_max: 2.0
-  net_margin_min: -5
-  sales_growth_min: 0
+  debt_equity_max: 3.0
+  net_margin_min: -10
+  sales_growth_min: -5
 technicals:
-  price_min: 10
-  price_max: 50
-  avg_volume_min: 2000000
-  rsi_max: 60
-  above_sma200: true
+  price_min: 5
+  price_max: 500
+  avg_volume_min: 200000
+  rsi_max: 75
+  above_sma200: false
 options:
   optionable: true
 sectors:
