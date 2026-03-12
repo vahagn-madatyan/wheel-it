@@ -50,7 +50,7 @@
   - Verify: `pytest tests/test_pipeline.py -v` passes all 63 tests; `ls screener/pipeline.py config/presets/moderate.yaml` both exist
   - Done when: All S01–S06 source files are on the working branch and the full test suite passes green
 
-- [ ] **T02: Fix None-handling in Stage 2 filters and update tests** `est:30m`
+- [x] **T02: Fix None-handling in Stage 2 filters and update tests** `est:30m`
   - Why: Every filter function returns `passed=False` on `None` metrics, eliminating stocks with any missing Finnhub data point. Stage 2 filters (Finnhub-dependent) should tolerate `None` since coverage is patchy. This is one of three root causes of zero results (FIX-03).
   - Files: `screener/pipeline.py`, `tests/test_pipeline.py`
   - Do: Change 5 Stage 2 filter functions (market_cap, debt_equity, net_margin, sales_growth, sector) to return `passed=True` with reason `"No data — passing with neutral score"` when metric is `None`. Update `run_stage_2_filters` no-profile case to pass Finnhub-dependent filters with neutral scores. Update 5 test assertions from `passed is False` to `passed is True` and reason text. Keep Stage 1 filters (price, volume, RSI, SMA200) failing on `None`.

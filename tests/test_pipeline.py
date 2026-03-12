@@ -207,8 +207,8 @@ class TestFilterMarketCap:
         stock = _make_stock(market_cap=None)
         config = _default_config()
         result = filter_market_cap(stock, config)
-        assert result.passed is False
-        assert "unavailable" in result.reason.lower()
+        assert result.passed is True
+        assert "no data" in result.reason.lower()
 
 
 # ===========================================================================
@@ -240,8 +240,8 @@ class TestFilterDebtEquity:
         stock = _make_stock(debt_equity=None)
         config = _default_config()
         result = filter_debt_equity(stock, config)
-        assert result.passed is False
-        assert "unavailable" in result.reason.lower()
+        assert result.passed is True
+        assert "no data" in result.reason.lower()
 
 
 # ===========================================================================
@@ -273,8 +273,8 @@ class TestFilterNetMargin:
         stock = _make_stock(net_margin=None)
         config = _default_config()
         result = filter_net_margin(stock, config)
-        assert result.passed is False
-        assert "unavailable" in result.reason.lower()
+        assert result.passed is True
+        assert "no data" in result.reason.lower()
 
 
 # ===========================================================================
@@ -306,8 +306,8 @@ class TestFilterSalesGrowth:
         stock = _make_stock(sales_growth=None)
         config = _default_config()
         result = filter_sales_growth(stock, config)
-        assert result.passed is False
-        assert "unavailable" in result.reason.lower()
+        assert result.passed is True
+        assert "no data" in result.reason.lower()
 
 
 # ===========================================================================
@@ -351,8 +351,8 @@ class TestFilterSector:
         stock = _make_stock(sector=None)
         config = _default_config()
         result = filter_sector(stock, config)
-        assert result.passed is False
-        assert "unavailable" in result.reason.lower()
+        assert result.passed is True
+        assert "no data" in result.reason.lower()
 
 
 # ===========================================================================

@@ -239,10 +239,10 @@ def filter_market_cap(stock: ScreenedStock, config: ScreenerConfig) -> FilterRes
     if stock.market_cap is None:
         return FilterResult(
             filter_name="market_cap",
-            passed=False,
+            passed=True,
             actual_value=None,
             threshold=min_cap,
-            reason="Market cap data unavailable",
+            reason="No data — passing with neutral score",
         )
 
     if stock.market_cap < min_cap:
@@ -278,10 +278,10 @@ def filter_debt_equity(stock: ScreenedStock, config: ScreenerConfig) -> FilterRe
     if stock.debt_equity is None:
         return FilterResult(
             filter_name="debt_equity",
-            passed=False,
+            passed=True,
             actual_value=None,
             threshold=max_de,
-            reason="Debt/equity data unavailable",
+            reason="No data — passing with neutral score",
         )
 
     if stock.debt_equity > max_de:
@@ -317,10 +317,10 @@ def filter_net_margin(stock: ScreenedStock, config: ScreenerConfig) -> FilterRes
     if stock.net_margin is None:
         return FilterResult(
             filter_name="net_margin",
-            passed=False,
+            passed=True,
             actual_value=None,
             threshold=min_margin,
-            reason="Net margin data unavailable",
+            reason="No data — passing with neutral score",
         )
 
     if stock.net_margin < min_margin:
@@ -356,10 +356,10 @@ def filter_sales_growth(stock: ScreenedStock, config: ScreenerConfig) -> FilterR
     if stock.sales_growth is None:
         return FilterResult(
             filter_name="sales_growth",
-            passed=False,
+            passed=True,
             actual_value=None,
             threshold=min_growth,
-            reason="Sales growth data unavailable",
+            reason="No data — passing with neutral score",
         )
 
     if stock.sales_growth < min_growth:
@@ -399,10 +399,10 @@ def filter_sector(stock: ScreenedStock, config: ScreenerConfig) -> FilterResult:
     if stock.sector is None:
         return FilterResult(
             filter_name="sector",
-            passed=False,
+            passed=True,
             actual_value=None,
             threshold=None,
-            reason="Sector data unavailable",
+            reason="No data — passing with neutral score",
         )
 
     sector_lower = stock.sector.lower()
@@ -576,14 +576,14 @@ def run_stage_2_filters(
     metrics = metrics_response.get("metric", {})
 
     if not profile:
-        # No Finnhub data — fail all Finnhub-dependent filters
-        no_data_reason = "No Finnhub data available"
+        # No Finnhub data — pass Finnhub-dependent filters with neutral score
+        no_data_reason = "No Finnhub data — passing with neutral score"
         results = [
-            FilterResult(filter_name="market_cap", passed=False, reason=no_data_reason),
-            FilterResult(filter_name="debt_equity", passed=False, reason=no_data_reason),
-            FilterResult(filter_name="net_margin", passed=False, reason=no_data_reason),
-            FilterResult(filter_name="sales_growth", passed=False, reason=no_data_reason),
-            FilterResult(filter_name="sector", passed=False, reason=no_data_reason),
+            FilterResult(filter_name="market_cap", passed=True, reason=no_data_reason),
+            FilterResult(filter_name="debt_equity", passed=True, reason=no_data_reason),
+            FilterResult(filter_name="net_margin", passed=True, reason=no_data_reason),
+            FilterResult(filter_name="sales_growth", passed=True, reason=no_data_reason),
+            FilterResult(filter_name="sector", passed=True, reason=no_data_reason),
             filter_optionable(stock, config, optionable_set),
         ]
         for r in results:
