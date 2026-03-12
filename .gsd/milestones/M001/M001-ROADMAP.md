@@ -74,7 +74,7 @@ This milestone is complete only when all are true:
 - [x] **S06: Packaging Cleanup** `risk:medium` `depends:[S05]`
   > After this: Fresh `pip install -e .` works without manual dep installs, CLI shows Rich Panel config errors, credential tests pass regardless of local .env contents.
 
-- [ ] **S07: Pipeline Fix + Preset Overhaul** `risk:high` `depends:[S06]`
+- [x] **S07: Pipeline Fix + Preset Overhaul** `risk:high` `depends:[S06]`
   > After this: User runs `run-screener --preset moderate` and gets actual stock results. Each of the three presets produces different survivor counts with visibly different threshold strictness. Stocks with missing Finnhub data survive with neutral scores instead of being eliminated.
 
 - [ ] **S08: HV Rank + Earnings Calendar** `risk:medium` `depends:[S07]`
