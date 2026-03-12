@@ -1,0 +1,20 @@
+preset: aggressive
+fundamentals:
+  market_cap_min: 500000000
+  debt_equity_max: 3.0
+  net_margin_min: -10
+  sales_growth_min: -5
+technicals:
+  price_min: 5
+  price_max: 500
+  avg_volume_min: 200000
+  rsi_max: 75
+  above_sma200: false
+  hv_percentile_min: 20
+earnings:
+  earnings_exclusion_days: 7
+options:
+  optionable: true
+sectors:
+  include: []
+  exclude: []

@@ -1,0 +1,23 @@
+preset: conservative
+fundamentals:
+  market_cap_min: 10000000000
+  debt_equity_max: 0.5
+  net_margin_min: 10
+  sales_growth_min: 10
+technicals:
+  price_min: 20
+  price_max: 100
+  avg_volume_min: 1000000
+  rsi_max: 55
+  above_sma200: true
+  hv_percentile_min: 50
+earnings:
+  earnings_exclusion_days: 21
+options:
+  optionable: true
+sectors:
+  include: []
+  exclude:
+    - Biotechnology
+    - Cannabis
+    - "Oil & Gas Exploration & Production"
