@@ -2,7 +2,71 @@
 
 ## Active
 
-(None — all 25 M001 requirements validated)
+### TOPN-01 — `--top-n N` CLI flag caps stock count after Stage 1
+- Class: core-capability
+- Status: active
+- Description: `run-screener --top-n N` limits the number of stocks that proceed past Stage 1 filters into the expensive per-symbol stages (earnings, fundamentals, options chain)
+- Why it matters: Screener takes hours processing hundreds of stocks through rate-limited API calls; capping to N stocks makes it usable in minutes
+- Source: user
+- Primary owning slice: M002/S02
+- Supporting slices: M002/S01
+- Validation: unmapped
+- Notes: N is a positive integer; no default cap when flag is omitted
+
+### TOPN-02 — Monthly performance computed from existing bar data (~22 trading days)
+- Class: core-capability
+- Status: active
+- Description: Compute 1-month price performance (%) from the daily bars already fetched by the pipeline, using approximately 22 trading days lookback
+- Why it matters: Provides the sort key for selecting worst-performing stocks (best put-selling candidates with elevated premium)
+- Source: user
+- Primary owning slice: M002/S01
+- Supporting slices: none
+- Validation: unmapped
+- Notes: Uses existing 250-day bar data; no additional API calls needed
+
+### TOPN-03 — Stage 1 survivors sorted by ascending perf, top N proceed to expensive stages
+- Class: core-capability
+- Status: active
+- Description: After Stage 1 filters pass, sort surviving stocks by ascending 1-month performance and take only the top N before proceeding to Stage 1b/2/3
+- Why it matters: Worst recent performers have elevated put premiums — this selects the most attractive put-selling candidates first
+- Source: user
+- Primary owning slice: M002/S01
+- Supporting slices: none
+- Validation: unmapped
+- Notes: Stocks with insufficient bar data for perf computation sort to the end
+
+### TOPN-04 — `perf_1m` field on ScreenedStock populated during indicator computation
+- Class: core-capability
+- Status: active
+- Description: ScreenedStock dataclass gains a `perf_1m` Optional[float] field populated from bar data during the indicator computation step
+- Why it matters: Makes monthly performance available for sorting, display, and downstream use
+- Source: user
+- Primary owning slice: M002/S01
+- Supporting slices: none
+- Validation: unmapped
+- Notes: Percentage value (e.g. -5.2 for a 5.2% decline)
+
+### TOPN-05 — "Perf 1M" column visible in Rich results table
+- Class: core-capability
+- Status: active
+- Description: The screener results table displays a "Perf 1M" column showing the 1-month performance percentage for each surviving stock
+- Why it matters: Users can see why stocks were selected and understand the sort order
+- Source: user
+- Primary owning slice: M002/S02
+- Supporting slices: none
+- Validation: unmapped
+- Notes: Formatted as percentage with sign (e.g. -5.2%, +3.1%)
+
+### TOPN-06 — No flag = all stocks processed (backward compatible)
+- Class: core-capability
+- Status: active
+- Description: When `--top-n` is not specified, the screener processes all Stage 1 survivors through the full pipeline, preserving current behavior
+- Why it matters: Existing usage and automation must not break
+- Source: user
+- Primary owning slice: M002/S02
+- Supporting slices: none
+- Validation: unmapped
+- Notes: top_n=None in pipeline means no cap
 
 ## Validated
 
