@@ -26,6 +26,7 @@ from core.execution import sell_puts, sell_calls
 from core.state_manager import update_state, calculate_risk
 from logging.logger_setup import setup_logger
 from logging.strategy_logger import StrategyLogger
+from screener.call_screener import screen_calls
 from screener.config_loader import format_validation_errors, load_config
 from screener.display import (
     progress_context,
@@ -151,9 +152,55 @@ def run(
         states = update_state(positions)
         strat_logger.add_state_dict(states)
 
+        # Load screener config for call screening thresholds
+        try:
+            call_config = load_config()
+        except Exception:
+            call_config = None
+
         for symbol, state in states.items():
             if state["type"] == "long_shares":
-                sell_calls(client, symbol, state["price"], state["qty"], strat_logger)
+                if state["qty"] < 100:
+                    std_logger.error(
+                        "Not enough shares of %s to cover short calls! "
+                        "Only %d shares held, need 100.",
+                        symbol,
+                        state["qty"],
+                    )
+                    continue
+
+                # Use call screener to find best covered call
+                recommendations = screen_calls(
+                    client.trade_client,
+                    client.option_client,
+                    symbol,
+                    state["price"],
+                    config=call_config,
+                )
+                if recommendations:
+                    best = recommendations[0]
+                    std_logger.info(
+                        "Call screener selected %s (strike=$%.2f, DTE=%d, "
+                        "premium=$%.2f, ann.return=%.1f%%)",
+                        best.symbol,
+                        best.strike,
+                        best.dte,
+                        best.premium,
+                        best.annualized_return,
+                    )
+                    client.market_sell(best.symbol)
+                    if strat_logger:
+                        strat_logger.log_sold_calls({
+                            "symbol": best.symbol,
+                            "underlying": best.underlying,
+                            "strike": best.strike,
+                            "dte": best.dte,
+                            "premium": best.premium,
+                            "delta": best.delta,
+                            "annualized_return": best.annualized_return,
+                        })
+                else:
+                    std_logger.info("No viable covered call found for %s", symbol)
 
         allowed_symbols = list(set(SYMBOLS).difference(states.keys()))
         buying_power = MAX_RISK - current_risk

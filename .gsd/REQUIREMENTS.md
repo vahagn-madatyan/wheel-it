@@ -74,60 +74,7 @@ Aggressive preset uses looser thresholds (small-cap OK, wider delta range, lower
 
 Each preset includes default sector avoid/prefer lists (conservative favors stable sectors, aggressive excludes nothing)
 
-### CALL-01 — User can run `run-call-screener` standalone CLI to screen covered call opportunities
 
-- Status: active
-- Class: core-capability
-- Source: inferred
-- Primary Slice: S10
-
-User can run `run-call-screener` standalone CLI to screen covered call opportunities
-
-### CALL-02 — Call screener accepts symbol + cost basis (from Alpaca positions or user input) and finds best call to sell
-
-- Status: active
-- Class: core-capability
-- Source: inferred
-- Primary Slice: S10
-
-Call screener accepts symbol + cost basis (from Alpaca positions or user input) and finds best call to sell
-
-### CALL-03 — Call screener enforces strike >= cost basis (never sell below cost basis)
-
-- Status: active
-- Class: core-capability
-- Source: inferred
-- Primary Slice: S10
-
-Call screener enforces strike >= cost basis (never sell below cost basis)
-
-### CALL-04 — Call screener applies same DTE/OI/spread/delta filters as put screening (configurable via presets)
-
-- Status: active
-- Class: core-capability
-- Source: inferred
-- Primary Slice: S10
-- Supporting Slices: S09
-
-Call screener applies same DTE/OI/spread/delta filters as put screening (configurable via presets)
-
-### CALL-05 — Call screener displays Rich table with symbol, cost basis, recommended strike, DTE, premium, delta, annualized return
-
-- Status: active
-- Class: core-capability
-- Source: inferred
-- Primary Slice: S10
-
-Call screener displays Rich table with symbol, cost basis, recommended strike, DTE, premium, delta, annualized return
-
-### CALL-06 — `run-strategy` integrates call screener to select covered calls for assigned positions
-
-- Status: active
-- Class: core-capability
-- Source: inferred
-- Primary Slice: S10
-
-`run-strategy` integrates call screener to select covered calls for assigned positions
 
 ## Validated
 
@@ -228,6 +175,55 @@ Options chain validation runs only on stocks that pass all prior filter stages
 - Proof: test_yield_column_in_results_table + 8 compute_put_premium_yield math tests in test_options_chain.py
 
 Best put premium (annualized yield) is displayed in screener results table for each passing stock
+
+### CALL-01 — User can run `run-call-screener` standalone CLI to screen covered call opportunities
+
+- Status: validated
+- Class: core-capability
+- Source: inferred
+- Primary Slice: S10
+- Proof: 3 CLI tests in test_call_screener.py (test_cli_invokes_screen_calls, test_cli_symbol_uppercased, test_cli_preset_override); `run-call-screener` registered in pyproject.toml
+
+### CALL-02 — Call screener accepts symbol + cost basis (from Alpaca positions or user input) and finds best call to sell
+
+- Status: validated
+- Class: core-capability
+- Source: inferred
+- Primary Slice: S10
+- Proof: test_basic_screening_returns_recommendation + test_sorted_by_annualized_return_descending in test_call_screener.py; screen_calls() accepts symbol + cost_basis args
+
+### CALL-03 — Call screener enforces strike >= cost basis (never sell below cost basis)
+
+- Status: validated
+- Class: core-capability
+- Source: inferred
+- Primary Slice: S10
+- Proof: test_strike_below_cost_basis_excluded + test_strike_equal_to_cost_basis_included + test_all_below_cost_basis_returns_empty in test_call_screener.py
+
+### CALL-04 — Call screener applies same DTE/OI/spread/delta filters as put screening (configurable via presets)
+
+- Status: validated
+- Class: core-capability
+- Source: inferred
+- Primary Slice: S10
+- Supporting Slices: S09
+- Proof: test_low_oi_excluded, test_wide_spread_excluded, test_delta_below_min_excluded, test_delta_above_max_excluded, test_preset_thresholds_applied, test_conservative_rejects_moderate_oi in test_call_screener.py; DTE range matches put screener (14-60 days)
+
+### CALL-05 — Call screener displays Rich table with symbol, cost basis, recommended strike, DTE, premium, delta, annualized return
+
+- Status: validated
+- Class: core-capability
+- Source: inferred
+- Primary Slice: S10
+- Proof: test_table_renders_with_data verifies all columns present; test_table_delta_none_shows_na, test_table_empty_shows_message, test_table_multiple_rows in test_call_screener.py
+
+### CALL-06 — `run-strategy` integrates call screener to select covered calls for assigned positions
+
+- Status: validated
+- Class: core-capability
+- Source: inferred
+- Primary Slice: S10
+- Proof: test_long_shares_triggers_call_screener, test_no_recommendations_does_not_sell, test_insufficient_shares_skips_call_screening in test_call_screener.py; run_strategy.py imports and uses screen_calls for long_shares state
 
 ## Deferred
 

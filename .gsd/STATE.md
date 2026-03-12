@@ -1,9 +1,9 @@
 # GSD State
 
 **Active Milestone:** M001 — Screener Fix + Covered Calls
-**Active Slice:** S10 — Covered Call Screening + Strategy Integration
-**Phase:** summarizing
-**Requirements Status:** 14 active · 11 validated · 0 deferred · 0 out of scope
+**Active Slice:** None
+**Phase:** completing-milestone
+**Requirements Status:** 8 active · 17 validated · 0 deferred · 0 out of scope
 
 ## Milestone Registry
 - 🔄 **M001:** Screener Fix + Covered Calls
@@ -15,4 +15,4 @@
 - None
 
 ## Next Action
-All tasks done in S10. Write slice summary and complete slice.
+All slices complete in M001. Write milestone summary.

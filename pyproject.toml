@@ -30,6 +30,7 @@ dependencies = [
 [project.scripts]
 run-strategy = "scripts.run_strategy:main"
 run-screener = "scripts.run_screener:main"
+run-call-screener = "scripts.run_call_screener:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

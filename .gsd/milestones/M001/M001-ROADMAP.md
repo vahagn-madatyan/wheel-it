@@ -83,7 +83,7 @@ This milestone is complete only when all are true:
 - [x] **S09: Options Chain Validation** `risk:medium` `depends:[S08]`
   > After this: User runs `run-screener` and only sees stocks with liquid, tradeable options — low OI and wide spread stocks are eliminated. An annualized put premium yield column appears in the results table.
 
-- [ ] **S10: Covered Call Screening + Strategy Integration** `risk:medium` `depends:[S09]`
+- [x] **S10: Covered Call Screening + Strategy Integration** `risk:medium` `depends:[S09]`
   > After this: User runs `run-call-screener AAPL --cost-basis 175` and gets a Rich table of recommended covered calls (strike ≥ cost basis). Running `run-strategy` on assigned positions automatically selects covered calls using the same logic.
 
 ## Boundary Map

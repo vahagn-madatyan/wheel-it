@@ -48,17 +48,20 @@ Automatically identify wheel-strategy-suitable stocks by combining fundamental h
 
 **Goal:** Debug and fix the stock screening pipeline (zero stocks survive filtering), then add covered call screening for the wheel's second leg.
 
-**Status:** S01–S09 complete. S10 remaining (v1.1 in progress).
+**Status:** M001 complete. All 10 slices shipped (S01–S10).
 
 ## Context
 
 Shipped v1.0 with 5,843 LOC Python across 6 phases (12 plans).
 Tech stack: Python 3.13, alpaca-py, finnhub-python, ta, pydantic, rich, typer, pyyaml.
-302 tests passing, zero failures. 28/28 v1.0 requirements satisfied. 11/25 v1.1 requirements validated.
+345 tests passing, zero failures. 28/28 v1.0 requirements satisfied. 25/25 v1.1 requirements validated.
 
 **v1.0 screening issue (FIXED in S07):** Zero-results bug fixed via D/E normalization and preset differentiation.
 **S08:** HV percentile ranking and earnings proximity filtering active in pipeline. 47 new tests.
 **S09:** Options chain OI/spread validation as Stage 3 in pipeline. Put premium yield in results table. 58 new tests.
+**S10:** Covered call screening with standalone `run-call-screener` CLI and `run-strategy` integration. 43 new tests. All 25 M001 requirements validated.
+
+**Status:** M001 complete. All 10 slices shipped. 345 tests passing, zero failures. 25/25 requirements validated.
 
 ---
-*Last updated: 2026-03-11 after S09 completion*
+*Last updated: 2026-03-11 after S10 completion (M001 complete)*
