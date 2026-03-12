@@ -49,55 +49,128 @@ This code helps pick the right puts and calls to sell, tracks your positions, an
    ALPACA_API_KEY=your_public_key
    ALPACA_SECRET_KEY=your_private_key
    IS_PAPER=true  # Set to false if using a live account
+   FINNHUB_API_KEY=your_finnhub_key  # Required for stock screener
    ```
 
-   Your credentials will be loaded from `.env` automatically.
+   Your credentials will be loaded from `.env` automatically. Get a free Finnhub API key at [finnhub.io/register](https://finnhub.io/register).
 
 5. **Choose your symbols:**
 
-   The strategy trades only the symbols listed in `config/symbol_list.txt`. Edit this file to include the tickers you want to run the Wheel strategy on — one symbol per line. Choose stocks you'd be comfortable holding long-term.
+   The strategy trades only the symbols listed in `config/symbol_list.txt`. Edit this file to include the tickers you want to run the Wheel strategy on - one symbol per line. Choose stocks you'd be comfortable holding long-term.
+
+   > **Tip:** Use `run-screener --update-symbols` to automatically populate this file with screener results (see [Stock Screener](#stock-screener) below).
 
 6. **Configure trading parameters:**
 
    Adjust values in `config/params.py` to customize things like buying power limits, options characteristics (e.g., greeks / expiry), and scoring thresholds. Each parameter is documented in the file.
 
-
 7. **Run the strategy**
 
    Run the strategy (which assumes an empty or fully managed portfolio):
-   
+
    ```bash
    run-strategy
    ```
-   
+
    > **Tip:** On your first run, use `--fresh-start` to liquidate all existing positions and start clean.
-   
+
    There are two types of logging:
-   
+
    * **Strategy JSON logging** (`--strat-log`):
      Always saves detailed JSON files to disk for analyzing strategy performance.
-   
+
    * **Runtime logging** (`--log-level` and `--log-to-file`):
      Controls console/file logs for monitoring the current run. Optional and configurable.
-   
+
    **Flags:**
-   
-   * `--fresh-start` — Liquidate all positions before running (recommended first run).
-   * `--strat-log` — Enable strategy JSON logging (always saved to disk).
-   * `--log-level LEVEL` — Set runtime logging verbosity (default: INFO).
-   * `--log-to-file` — Save runtime logs to file instead of console.
-   
+
+   * `--fresh-start` - Liquidate all positions before running (recommended first run).
+   * `--screen` - Run the stock screener before strategy execution. Updates your symbol list with position-safe symbol export.
+   * `--strat-log` - Enable strategy JSON logging (always saved to disk).
+   * `--log-level LEVEL` - Set runtime logging verbosity (default: INFO).
+   * `--log-to-file` - Save runtime logs to file instead of console.
+
    Example:
-   
+
    ```bash
    run-strategy --fresh-start --strat-log --log-level DEBUG --log-to-file
    ```
-   
+
    For more info:
-   
+
    ```bash
    run-strategy --help
    ```
+
+---
+
+## Stock Screener
+
+The project includes a built-in stock screener that finds wheel-strategy-suitable stocks using fundamental data from Finnhub and technical data from Alpaca.
+
+### Running the Screener
+
+```bash
+run-screener                          # Run with default preset (moderate)
+run-screener --preset conservative    # Tighter filters (large-cap, low debt)
+run-screener --preset aggressive      # Looser filters (small-cap OK)
+run-screener --verbose                # Show per-filter elimination breakdown
+run-screener --update-symbols         # Export results to config/symbol_list.txt
+```
+
+### Presets
+
+Three preset profiles control all screening thresholds:
+
+| Category | Conservative | Moderate | Aggressive |
+|----------|-------------|----------|------------|
+| Market Cap Min | $10B | $2B | $500M |
+| Debt/Equity Max | 0.5 | 1.5 | 3.0 |
+| Avg Volume Min | 1M | 500K | 200K |
+| HV Percentile Min | 50 | 30 | 20 |
+| Earnings Exclusion | 21 days | 14 days | 7 days |
+| Options OI Min | 500 | 100 | 50 |
+| Options Spread Max | 5% | 10% | 20% |
+| Sector Exclusions | Biotech, Cannabis, O&G | Cannabis | None |
+
+Preset files are in `config/presets/`. You can also create a custom `config/screener.yaml` to override individual values.
+
+### Screening Pipeline
+
+The screener runs a 4-stage filtering pipeline in cheap-first order:
+
+1. **Stage 1 - Technicals** (Alpaca data): Price range, volume, RSI, SMA(200), HV percentile
+2. **Stage 1b - Earnings** (Finnhub): Excludes stocks with earnings within the configured window
+3. **Stage 2 - Fundamentals** (Finnhub): Market cap, debt/equity, net margin, sales growth, sector
+4. **Stage 3 - Options Chain** (Alpaca): Open interest, bid/ask spread on nearest ATM put
+
+Survivors are scored by wheel suitability (capital efficiency 45%, volatility 35%, fundamentals 20%) and displayed as a Rich table with HV percentile and annualized put premium yield columns.
+
+### Symbol Export
+
+`--update-symbols` safely merges screener results into `config/symbol_list.txt`, preserving any symbols with active positions. A colored diff shows what was added/removed.
+
+---
+
+## Covered Call Screener
+
+When the wheel assigns you stock, use the call screener to find the best covered calls to sell:
+
+```bash
+run-call-screener AAPL --cost-basis 175.00                    # Screen calls for AAPL
+run-call-screener AAPL --cost-basis 175.00 --preset conservative  # Use stricter filters
+```
+
+The call screener:
+- Fetches OTM call contracts within a 14-60 DTE range
+- Filters by **strike ≥ cost basis** (never sell below your entry price)
+- Applies OI, bid/ask spread, and delta filters from your preset
+- Ranks survivors by **annualized return** (descending)
+- Displays a Rich table with strike, DTE, premium, delta, and annualized return
+
+### Automatic Call Screening in Strategy
+
+When `run-strategy` detects assigned stock positions (`long_shares` state), it automatically uses the call screener to select and sell the best covered call - no manual intervention needed.
 
 ---
 
@@ -112,9 +185,9 @@ This code helps pick the right puts and calls to sell, tracks your positions, an
 
 ### Notes
 
-* **Account state matters**: This strategy assumes full control of the account — all positions are expected to be managed by this script. For best results, start with a clean account (e.g. by using the `--fresh-start` flag).
+* **Account state matters**: This strategy assumes full control of the account - all positions are expected to be managed by this script. For best results, start with a clean account (e.g. by using the `--fresh-start` flag).
 * **One contract per symbol**: To simplify risk management, this implementation trades only one contract at a time per symbol. You can modify this logic in `core/strategy.py` to suit more advanced use cases.
-* The **user agent** for API calls defaults to `OPTIONS-WHEEL` to help Alpaca track usage of runnable algos and improve user experience.  You can opt out by adjusting the `USER_AGENT` variable in `core/user_agent_mixin.py` — though we kindly hope you’ll keep it enabled to support ongoing improvements.  
+* The **user agent** for API calls defaults to `OPTIONS-WHEEL` to help Alpaca track usage of runnable algos and improve user experience.  You can opt out by adjusting the `USER_AGENT` variable in `core/user_agent_mixin.py` - though we kindly hope you'll keep it enabled to support ongoing improvements.
 * **Want to customize the strategy?** The `core/strategy.py` module is a great place to start exploring and modifying the logic.
 
 ---
@@ -157,7 +230,7 @@ Running the script once will only turn the wheel a single time. To keep it runni
 
 ## Test Results
 
-To validate the code mechanics, the strategy was tested in an Alpaca paper account over the course of two weeks (May 14 – May 28, 2025). A full report and explanation of each decision point can be found in [`reports/options-wheel-strategy-test.pdf`](./reports/options-wheel-strategy-test.pdf). A high-level summary of the trading results is given below.
+To validate the code mechanics, the strategy was tested in an Alpaca paper account over the course of two weeks (May 14 - May 28, 2025). A full report and explanation of each decision point can be found in [`reports/options-wheel-strategy-test.pdf`](./reports/options-wheel-strategy-test.pdf). A high-level summary of the trading results is given below.
 
 ### Premiums Collected
 
@@ -226,13 +299,14 @@ The core logic is defined in `core/strategy.py`.
 
 ### Stock Picking
 
-* Use technical indicators such as moving averages, RSI, or support/resistance levels to identify stocks likely to remain range-bound — ideal for selling options in the Wheel strategy.
-* Incorporate fundamental filters like earnings growth, dividend history, or volatility to select stocks you’re comfortable holding long term.
+* The built-in screener already uses RSI, SMA(200), HV percentile, and fundamental filters. Customize thresholds in `config/presets/` or add new filters in `screener/pipeline.py`.
+* Add additional technical indicators or custom scoring factors to `screener/pipeline.py:compute_wheel_score()`.
 
 ### Scoring Function for Puts / Calls
 
 * Modify the scoring formula to weight factors differently or separately for puts vs calls. For example, emphasize calls with strikes just below resistance levels or puts on stocks with strong support.
 * Consider adding factors like implied volatility or premium decay to better capture option pricing nuances.
+* The screener scoring weights (capital efficiency 45%, volatility 35%, fundamentals 20%) can be adjusted in `screener/pipeline.py`.
 
 ### Managing a Larger Portfolio
 
@@ -253,7 +327,7 @@ The core logic is defined in `core/strategy.py`.
 
 ## Final Notes
 
-This is a great starting point for automating your trading, but always double-check your live trades — no system is completely hands-off.
+This is a great starting point for automating your trading, but always double-check your live trades - no system is completely hands-off.
 
 Happy wheeling! 🚀
 
@@ -263,11 +337,11 @@ Disclosures
 
 Options trading is not suitable for all investors due to its inherent high risk, which can potentially result in significant losses. Please read [Characteristics and Risks of Standardized Options](https://www.theocc.com/company-information/documents-and-archives/options-disclosure-document) before investing in options
 
-The Paper Trading API is offered by AlpacaDB, Inc. and does not require real money or permit a user to transact in real securities in the market. Providing use of the Paper Trading API is not an offer or solicitation to buy or sell securities, securities derivative or futures products of any kind, or any type of trading or investment advice, recommendation or strategy, given or in any manner endorsed by AlpacaDB, Inc. or any AlpacaDB, Inc. affiliate and the information made available through the Paper Trading API is not an offer or solicitation of any kind in any jurisdiction where AlpacaDB, Inc. or any AlpacaDB, Inc. affiliate (collectively, “Alpaca”) is not authorized to do business.
+The Paper Trading API is offered by AlpacaDB, Inc. and does not require real money or permit a user to transact in real securities in the market. Providing use of the Paper Trading API is not an offer or solicitation to buy or sell securities, securities derivative or futures products of any kind, or any type of trading or investment advice, recommendation or strategy, given or in any manner endorsed by AlpacaDB, Inc. or any AlpacaDB, Inc. affiliate and the information made available through the Paper Trading API is not an offer or solicitation of any kind in any jurisdiction where AlpacaDB, Inc. or any AlpacaDB, Inc. affiliate (collectively, "Alpaca") is not authorized to do business.
 
 All investments involve risk, and the past performance of a security, or financial product does not guarantee future results or returns. There is no guarantee that any investment strategy will achieve its objectives. Please note that diversification does not ensure a profit, or protect against loss. There is always the potential of losing money when you invest in securities, or other financial products. Investors should consider their investment objectives and risks carefully before investing.
 
-Please note that this article is for general informational purposes only and is believed to be accurate as of the posting date but may be subject to change. The examples above are for illustrative purposes only and should not be considered investment advice. 
+Please note that this article is for general informational purposes only and is believed to be accurate as of the posting date but may be subject to change. The examples above are for illustrative purposes only and should not be considered investment advice.
 
 Securities brokerage services are provided by Alpaca Securities LLC ("Alpaca Securities"), member [FINRA](https://www.finra.org/)/[SIPC](https://www.sipc.org/), a wholly-owned subsidiary of AlpacaDB, Inc. Technology and services are offered by AlpacaDB, Inc.
 
