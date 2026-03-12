@@ -1,4 +1,4 @@
-# Requirements: Wheeely v1.1 — Screener Fix + Covered Calls
+# Requirements: Wheeely v1.1 -- Screener Fix + Covered Calls
 
 **Defined:** 2026-03-11
 **Core Value:** Automatically identify wheel-strategy-suitable stocks by combining fundamental health checks with technical screening, replacing manual symbol selection with data-driven filtering.
@@ -11,7 +11,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 - [ ] **FIX-01**: Screener produces non-zero results when run with moderate preset against live market data
 - [ ] **FIX-02**: Finnhub debt/equity values are normalized correctly (percentage-to-ratio conversion if needed, verified with diagnostic script)
-- [ ] **FIX-03**: Missing Finnhub data (None values) for any single metric does not eliminate a stock — stock passes filter with neutral score instead
+- [ ] **FIX-03**: Missing Finnhub data (None values) for any single metric does not eliminate a stock -- stock passes filter with neutral score instead
 - [ ] **FIX-04**: avg_volume_min is differentiated across presets (conservative=1M, moderate=500K, aggressive=200K)
 
 ### Preset Overhaul
@@ -68,49 +68,49 @@ Deferred to v1.2+. Tracked but not in current roadmap.
 
 | Feature | Reason |
 |---------|--------|
-| Paid IV data (ORATS, Barchart) | User decided free APIs only — HV Percentile is adequate proxy |
+| Paid IV data (ORATS, Barchart) | User decided free APIs only -- HV Percentile is adequate proxy |
 | Backtesting screener results | Separate domain, doubles scope, historical option data expensive |
 | Real-time streaming screener | Wheel trades happen weekly, batch CLI sufficient |
-| Custom filter expression language | Over-engineering for personal tool — YAML overrides sufficient |
+| Custom filter expression language | Over-engineering for personal tool -- YAML overrides sufficient |
 | ML-based stock selection | Black box, rule-based filters match documented strategy |
-| Multi-symbol covered call optimization | Portfolio-level Greeks too complex — screen each position independently |
-| Finviz scraping | Unreliable, ToS violation — Finnhub API already integrated |
+| Multi-symbol covered call optimization | Portfolio-level Greeks too complex -- screen each position independently |
+| Finviz scraping | Unreliable, ToS violation -- Finnhub API already integrated |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FIX-01 | — | Pending |
-| FIX-02 | — | Pending |
-| FIX-03 | — | Pending |
-| FIX-04 | — | Pending |
-| PRES-01 | — | Pending |
-| PRES-02 | — | Pending |
-| PRES-03 | — | Pending |
-| PRES-04 | — | Pending |
-| HVPR-01 | — | Pending |
-| HVPR-02 | — | Pending |
-| HVPR-03 | — | Pending |
-| EARN-01 | — | Pending |
-| EARN-02 | — | Pending |
-| EARN-03 | — | Pending |
-| OPTS-01 | — | Pending |
-| OPTS-02 | — | Pending |
-| OPTS-03 | — | Pending |
-| OPTS-04 | — | Pending |
-| OPTS-05 | — | Pending |
-| CALL-01 | — | Pending |
-| CALL-02 | — | Pending |
-| CALL-03 | — | Pending |
-| CALL-04 | — | Pending |
-| CALL-05 | — | Pending |
-| CALL-06 | — | Pending |
+| FIX-01 | Phase 7 | Pending |
+| FIX-02 | Phase 7 | Pending |
+| FIX-03 | Phase 7 | Pending |
+| FIX-04 | Phase 7 | Pending |
+| PRES-01 | Phase 7 | Pending |
+| PRES-02 | Phase 7 | Pending |
+| PRES-03 | Phase 7 | Pending |
+| PRES-04 | Phase 7 | Pending |
+| HVPR-01 | Phase 8 | Pending |
+| HVPR-02 | Phase 8 | Pending |
+| HVPR-03 | Phase 8 | Pending |
+| EARN-01 | Phase 8 | Pending |
+| EARN-02 | Phase 8 | Pending |
+| EARN-03 | Phase 8 | Pending |
+| OPTS-01 | Phase 9 | Pending |
+| OPTS-02 | Phase 9 | Pending |
+| OPTS-03 | Phase 9 | Pending |
+| OPTS-04 | Phase 9 | Pending |
+| OPTS-05 | Phase 9 | Pending |
+| CALL-01 | Phase 10 | Pending |
+| CALL-02 | Phase 10 | Pending |
+| CALL-03 | Phase 10 | Pending |
+| CALL-04 | Phase 10 | Pending |
+| CALL-05 | Phase 10 | Pending |
+| CALL-06 | Phase 10 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 25 total
-- Mapped to phases: 0
-- Unmapped: 25 (pending roadmap creation)
+- Mapped to phases: 25
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-11*
-*Last updated: 2026-03-11 after initial definition*
+*Last updated: 2026-03-11 after roadmap creation*
