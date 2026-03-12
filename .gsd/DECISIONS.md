@@ -1,0 +1,34 @@
+# Decisions Register
+
+<!-- Append-only. Never edit or remove existing rows.
+     To reverse a decision, add a new row that supersedes it.
+     Read this file at the start of any planning or research phase. -->
+
+| # | When | Scope | Decision | Choice | Rationale | Revisable? |
+|---|------|-------|----------|--------|-----------|------------|
+| D001 | M001/S01 | convention | logging module shadow | `import logging as stdlib_logging` pattern + `importlib.util.spec_from_file_location` in `__init__.py` | Project's `logging/` package shadows stdlib; this re-exports cleanly | No |
+| D002 | M001/S01 | convention | YAML integer format | Plain integers only, no underscores | PyYAML parsing issues with underscore separators | No |
+| D003 | M001/S01 | pattern | Config validation | Early preset name validation in `load_config()` → `ValidationError` not `FileNotFoundError` | User gets actionable error message | No |
+| D004 | M001/S02 | pattern | Rate limit retry | Lambda wrappers in `company_profile`/`company_metrics` to separate SDK kwargs from logging kwargs in `_call_with_retry` | Clean separation of concerns | No |
+| D005 | M001/S02 | pattern | Finnhub mock pattern | Preserve real `FinnhubAPIException` class when patching the finnhub module | Prevents `TypeError` on `except` clauses | No |
+| D006 | M001/S02 | convention | Test date handling | `pd.bdate_range` with fixed end date instead of `datetime.now()` | Avoids non-deterministic business-day alignment | No |
+| D007 | M001/S02 | convention | Indicator minimums | 30 bars for RSI(14), 200 bars for SMA(200) — below threshold returns None | Prevents garbage computations | No |
+| D008 | M001/S03 | arch | Filter function purity | Take `ScreenedStock` + config → return `FilterResult`, never raise | Composable, testable pipeline stages | No |
+| D009 | M001/S03 | data | market_cap storage | Raw dollars on `ScreenedStock`; Finnhub millions conversion in `run_stage_2_filters` | Single unit system, conversion at boundary | No |
+| D010 | M001/S03 | arch | Stage 2 responsibility | Stage 2 runner handles Finnhub data fetch + field population, keeping filter functions data-agnostic | Filters don't know about API calls | No |
+| D011 | M001/S03 | convention | HV computation | Log returns with ddof=1 std dev, annualized by sqrt(252) | Standard financial convention | No |
+| D012 | M001/S03 | arch | Scoring weights | Capital efficiency 0.45, volatility 0.35, fundamentals 0.20 | Capital efficiency dominant for wheel strategy | Yes — if strategy changes |
+| D013 | M001/S03 | pattern | None handling in scoring | None HV and None fundamentals get neutral 0.5 score | Avoids penalizing stocks with partial data | No |
+| D014 | M001/S03 | pattern | Min-max normalization | 0.5 fallback when all values identical (single stock or equal metrics) | Prevents division by zero | No |
+| D015 | M001/S04 | pattern | Console injection | Console parameter injection for testability (default `_default_console`) | Testable without side effects | No |
+| D016 | M001/S04 | convention | Score coloring | Sorted thirds: top green, middle yellow, bottom red | Relative ranking, not absolute thresholds | No |
+| D017 | M001/S04 | convention | Filter breakdown display | Only shows filters that actually removed stocks | Reduces noise | No |
+| D018 | M001/S05 | pattern | Protected symbols | `get_protected_symbols` accepts `update_state_fn` as parameter (not import) | Testable, decoupled | No |
+| D019 | M001/S05 | pattern | CLI imports | Module-level imports in CLI entry points for patchability with `unittest.mock.patch` | Deferred imports prevent `@patch` from finding targets | No |
+| D020 | M001/S05 | convention | Default screener mode | Output-only by default (no `--output-only` flag needed) | Satisfies CLI-04, least surprise | No |
+| D021 | M001/S06 | pattern | dotenv test isolation | Patch `dotenv.load_dotenv` at source module, not at `config.credentials.load_dotenv` | `importlib.reload()` creates fresh binding | No |
+| D022 | M001/S06 | convention | CLI error output | `Console(stderr=True)` for error output, `typer.Exit(code=1)` for clean exit on validation failure | Error semantics, consistent with Typer framework | No |
+| D023 | M001 | arch | Slice ordering for v1.1 | Fix pipeline first (S07), then cheap pre-filters (S08), then expensive post-filters (S09), then new capability (S10) | Risk-first: broken pipeline is highest risk; cheap-first ordering matches existing pipeline architecture | No |
+| D024 | M001 | scope | Free APIs only | Approximate IV Rank from HV percentile, use Finnhub earnings calendar — no paid data sources (ORATS, Barchart) | User decided free APIs only; HV percentile is adequate proxy | No |
+| D025 | M001 | scope | Call screener dual mode | Standalone `run-call-screener` CLI + integrated into `run-strategy` flow for assigned positions | Serves both exploration and automation use cases | No |
+| D026 | M001 | scope | Debug first, features second | Fix zero-results pipeline bug before adding any new screening features | Must validate existing infrastructure works before extending it | No |
