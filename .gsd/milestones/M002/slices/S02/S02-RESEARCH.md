@@ -4,71 +4,66 @@
 
 ## Summary
 
-S02 adds the `--top-n` CLI flag to `run-screener` and a "Perf 1M" column to the Rich results table. However, **S01 was never actually implemented** — its summary is a doctor-created placeholder and no code changes exist in the codebase: `perf_1m` field is absent from `ScreenedStock`, `compute_monthly_performance()` doesn't exist, and `run_pipeline()` has no `top_n` parameter. S02 must therefore implement the full stack: perf computation, model field, pipeline sort/cap, CLI flag, and display column.
+S02 is a low-risk wiring slice. S01 (on branch `gsd/M002/S01`, not yet merged to current branch) already delivers all the hard work: `compute_monthly_performance()`, `perf_1m` field on `ScreenedStock`, the two-pass pipeline architecture with `run_pipeline(top_n=N)`, sort/cap logic, and 12 new tests (6 math + 6 pipeline). S02 must merge S01's code first, then add three things: a `--top-n` Typer option in `scripts/run_screener.py` that passes through to `run_pipeline(top_n=N)`, a "Perf 1M" column in `screener/display.py:render_results_table()`, and tests for both.
 
-The implementation is straightforward. All required patterns already exist in the codebase — `compute_hv_percentile` in `pipeline.py` shows the exact pattern for a new computation from bar data, `hv_percentile` on `ScreenedStock` shows how to add an optional float field, the CLI uses Typer `Option` with clear patterns in `run_screener.py`, and the display module has consistent column-adding patterns in `render_results_table()`.
+All three target files have clear, established patterns. The CLI file uses `typer.Option` with `Annotated` type hints. The display file uses `fmt_pct()` for percentage columns and follows a consistent `table.add_column()` + `table.add_row()` pattern. The test files use `typer.testing.CliRunner` for CLI tests and `Console(file=StringIO())` capture for display tests. No new libraries, no new patterns, no API calls.
 
 ## Recommendation
 
-Implement all six requirements (TOPN-01 through TOPN-06) in this slice since S01's work was never done. Structure into 3 tasks:
-
-1. **T01: Model + Computation + Pipeline** — Add `perf_1m` to `ScreenedStock`, add perf computation to `compute_indicators()` (or inline in pipeline), add `top_n` param to `run_pipeline()` with sort/cap logic between Stage 1 and Stage 1b. Tests for math, sort, cap, backward compat.
-2. **T02: CLI Flag** — Add `--top-n` Typer option to `run_screener.py`, wire it through to `run_pipeline(top_n=N)`. Tests for flag parsing and pipeline pass-through.
-3. **T03: Display Column** — Add "Perf 1M" column to `render_results_table()`. Tests for column rendering and formatting.
+1. **Merge S01 branch first** — `git merge gsd/M002/S01` into the S02 branch to get `perf_1m`, `compute_monthly_performance()`, `run_pipeline(top_n=)`, and all S01 tests.
+2. **Add `--top-n` CLI option** — A single `typer.Option` in `run()` with `int | None` type, passed to `run_pipeline(top_n=top_n)`. Follows the exact same pattern as `--verbose`, `--preset`, etc.
+3. **Add "Perf 1M" column** — Insert between "HV%ile" and "Yield" in `render_results_table()`. Use existing `fmt_pct()` with sign formatting (e.g. `+3.1%`, `-5.2%`). Note: `fmt_pct()` already handles negatives correctly but doesn't prefix `+` for positives — needs a small `fmt_perf()` helper or inline sign logic.
+4. **Tests** — CLI: verify `--top-n` is passed through to `run_pipeline()`. Display: verify "Perf 1M" column appears, handles None, shows sign.
 
 ## Don't Hand-Roll
 
 | Problem | Existing Solution | Why Use It |
 |---------|------------------|------------|
-| CLI option parsing | `typer.Option` | Already used for all 4 existing flags; consistent pattern |
-| Rich table columns | `table.add_column()` / `table.add_row()` | Exact pattern in `render_results_table()` with 12 existing columns |
-| Percentage formatting | `fmt_pct()` in `screener/display.py` | Already formats `X.X%` with None → "N/A" handling |
+| CLI option parsing | `typer.Option` with `Annotated` | Already used for `--verbose`, `--preset`, `--config`, `--update-symbols` |
+| Table rendering | `rich.table.Table` | Already used in `render_results_table()` |
+| Percentage formatting | `fmt_pct()` in `screener/display.py` | Already handles None → "N/A" and negative values |
+| CLI testing | `typer.testing.CliRunner` | Already used in `tests/test_cli_screener.py` |
+| Console capture | `Console(file=StringIO())` | Already used in `tests/test_display.py` |
 
 ## Existing Code and Patterns
 
-- `models/screened_stock.py` — Add `perf_1m: Optional[float] = None` field. Follow the pattern of `hv_percentile: Optional[float] = None` (L36). No factory or property needed — just a plain optional field.
-- `screener/market_data.py:compute_indicators()` — Add monthly perf computation here. Bar data (`close` column) is already available. Pattern: check `len(close) >= 23` (need 22 prior days + current), compute `(close[-1] / close[-22] - 1) * 100`, return as `perf_1m` key. Follows the RSI/SMA pattern of returning None on insufficient data.
-- `screener/pipeline.py:run_pipeline()` — Add `top_n: int | None = None` parameter. Insert sort/cap block at line ~1282 (after Stage 1 loop completes, before Stage 1b earnings). The pipeline currently processes each stock inline in a single loop — the sort/cap requires restructuring into: (1) build stocks + run Stage 1, (2) sort/cap Stage 1 survivors, (3) loop Stage 1b/2/3 on survivors only. This is the most complex change.
-- `screener/pipeline.py` lines 1256–1282 — Current single-pass loop processes each stock through all stages inline. For top_n, need to split: first pass computes indicators + Stage 1 filters for all stocks, second pass (post sort/cap) runs Stage 1b/2/3 on survivors only.
-- `scripts/run_screener.py` — Add `top_n` Typer option. Follow pattern of existing options (lines 67–78). Pass through to `run_pipeline(top_n=top_n)`. Pattern: `typer.Option("--top-n", help="...")` with `int | None` type.
-- `screener/display.py:render_results_table()` — Add column after "HV%ile" (or after "Yield"). Use `fmt_pct()` for formatting. Add sign prefix for clarity (e.g. `-5.2%`, `+3.1%`). May need a new `fmt_signed_pct()` helper since existing `fmt_pct` doesn't add `+` for positives.
-- `tests/test_cli_screener.py` — Shows pattern for CLI tests: mock `run_pipeline`, `load_config`, etc. with `@patch` decorators, invoke via `runner.invoke(app, ["--top-n", "20"])`.
-- `tests/test_display.py:_make_stock()` — Helper factory. Needs `perf_1m` kwarg added to support new display tests. Pattern: optional keyword with default None.
+- `scripts/run_screener.py:run()` — CLI entry point. Uses `Annotated[type, typer.Option()]` pattern for all options. `run_pipeline()` call at line 119 needs `top_n=top_n` kwarg added. Already imports everything needed except the new option.
+- `screener/display.py:render_results_table()` — Table builder. Columns added with `table.add_column()`, rows with `table.add_row()`. "HV%ile" column at position 10, "Yield" at 11, "Score" at 12. Insert "Perf 1M" between HV%ile and Yield (or after Yield, before Score).
+- `screener/display.py:fmt_pct()` — Formats `float | None` as `"X.X%"` / `"N/A"`. Does not add `+` prefix for positive values. S02 needs `+` prefix for perf to distinguish gains from losses visually — either a new `fmt_signed_pct()` or inline logic.
+- `tests/test_cli_screener.py` — 5 CLI tests using `CliRunner` + `@patch`. Pattern: patch all external dependencies at module level (`scripts.run_screener.X`), invoke with `runner.invoke(app, [...])`, assert exit code and mock calls.
+- `tests/test_display.py` — 35 tests. `_make_stock()` helper and `_all_pass_filters()` factory. `_capture_console()` returns `Console(file=StringIO(), width=120)`. Test pattern: render to captured console, check `console.file.getvalue()` for expected strings.
+- `models/screened_stock.py` — `perf_1m: Optional[float] = None` already added by S01 (on branch). Located in Technical indicators section after `hv_percentile`.
+- `screener/pipeline.py:run_pipeline()` — `top_n: int | None = None` parameter already added by S01. Sort/cap logic already implemented.
 
 ## Constraints
 
-- `run_pipeline()` currently uses a single loop that processes each stock inline through all stages. The top_n cap between Stage 1 and Stage 1b requires splitting this into two phases: all-stocks Stage 1, then survivors-only Stage 1b/2/3. This is the most significant structural change.
-- `perf_1m` uses ~22 trading days lookback (D041). Computation: `(close.iloc[-1] / close.iloc[-22] - 1) * 100`. Needs `len(close) >= 22` minimum.
-- `top_n=None` must mean no cap — backward compatible (D042, TOPN-06).
-- `None` perf_1m sorts to end, not dropped (D044). Use `sort(key=lambda s: (s.perf_1m is None, s.perf_1m or 0))` for ascending sort with None-last.
-- Cap placement: after Stage 1, before Stage 1b earnings calls (D043).
-- 345 existing tests must continue passing.
-- The project shadows stdlib `logging` with its own `logging/` package — use `import logging as stdlib_logging` (D001).
+- **S01 must be merged first** — `perf_1m` field, `compute_monthly_performance()`, and `run_pipeline(top_n=)` all live on branch `gsd/M002/S01`. Without merging, S02 code has nothing to wire to.
+- **`top_n` must be `None` by default** — D042 and TOPN-06 require backward compatibility. When omitted, all stocks process through full pipeline.
+- **`top_n` must be a positive integer** — Typer's `int` type handles basic parsing. Consider adding `min=1` validation or letting pipeline handle `top_n=0` gracefully.
+- **Column insertion order matters** — Rich table column order is positional. Adding "Perf 1M" means updating existing test assertions that check column presence (but current tests only check column names exist in output, not order, so this is safe).
+- **345 existing tests must pass** — S01 brought it to 357 (345 + 12 new). S02 adds more. All must pass.
 
 ## Common Pitfalls
 
-- **Pipeline loop restructuring** — The current single-pass loop must be split into two phases. Must ensure that stocks failing bar_data still get appended to the final list (they currently `continue` after appending). The restructuring must preserve the existing behavior where non-Stage-1-survivors still appear in final results for stage summary display.
-- **None sort ordering** — Python cannot compare `None < float`. Must use a key function that handles None explicitly: `(perf_1m is None, perf_1m or 0)` puts None-values last in ascending sort.
-- **Percentage sign in display** — `fmt_pct()` formats as `X.X%` but doesn't add `+` for positive values. For Perf 1M, positive returns should show `+3.1%` and negative `-5.2%`. Need a small formatting helper or inline logic.
-- **Typer integer option with None default** — Use `int | None` type annotation with `default=None`. Typer handles this natively. Don't use `Optional[int]` from typing — the project uses `X | None` style (see `Callable | None` in pipeline.py).
-- **Stage 1 survivors identification** — After restructuring, need to clearly identify which stocks passed Stage 1 (all filters passed so far) vs which stocks failed earlier stages but still need to appear in final results for display/summary purposes.
+- **Forgetting to merge S01** — The current branch (`gsd/M002/S02`) does not have `perf_1m`, `top_n`, or `compute_monthly_performance()`. Must merge `gsd/M002/S01` before coding.
+- **`fmt_pct()` doesn't show `+` sign** — Using `fmt_pct()` directly for perf_1m will show `3.1%` for positive and `-3.1%` for negative. For clarity, positive values should show `+3.1%`. Need either a wrapper or format string like `f"{value:+.1f}%"`.
+- **Patching `run_pipeline` in CLI tests** — Must patch at `scripts.run_screener.run_pipeline`, not `screener.pipeline.run_pipeline` (per D019 pattern — module-level imports in CLI entry points).
+- **`_make_stock()` helper doesn't set `perf_1m`** — The `_make_stock()` helper in `tests/test_display.py` needs a `perf_1m` parameter added, or tests should set it directly on the returned stock object.
 
 ## Open Risks
 
-- **Pipeline restructuring complexity** — Splitting the single-pass loop into two phases is the primary risk. The loop currently handles bar_data failures (early continue), Stage 1 failures (no further processing), and Stage 1b/2/3 sequentially. The restructured version must preserve identical behavior when `top_n=None` to avoid test regressions.
-- **S01 placeholder summary** — S01 was marked complete by a doctor process but no code was written. The S02 plan must explicitly scope all S01 deliverables (TOPN-02, TOPN-03, TOPN-04) in addition to S02's own requirements (TOPN-01, TOPN-05, TOPN-06).
+- **S01 merge conflicts** — S01 modifies `screener/pipeline.py`, `models/screened_stock.py`, `screener/market_data.py`, and `tests/test_pipeline.py`. The current S02 branch was created from the same base, so merge should be clean, but verify.
+- **`top_n=0` edge case** — If user passes `--top-n 0`, pipeline would cap to 0 stocks (empty results). Consider whether Typer should validate `min=1` or if pipeline should treat 0 as "no cap". Low risk — user error, not a functional bug.
 
 ## Skills Discovered
 
 | Technology | Skill | Status |
 |------------|-------|--------|
-| Typer CLI | — | none found (standard library usage, no skill needed) |
-| Rich tables | — | none found (standard library usage, no skill needed) |
-| Python/pandas | — | none found (trivial computation) |
+| Typer CLI | (none relevant) | none found |
+| Rich tables | `autumnsgrove/groveengine@rich-terminal-output` | available (58 installs) — not relevant enough for this simple column addition |
 
 ## Sources
 
-- Codebase inspection: `screener/pipeline.py`, `screener/market_data.py`, `screener/display.py`, `scripts/run_screener.py`, `models/screened_stock.py`
-- Test patterns: `tests/test_cli_screener.py`, `tests/test_display.py`
-- Decision register: `.gsd/DECISIONS.md` (D041–D044)
-- Requirements: `.gsd/REQUIREMENTS.md` (TOPN-01 through TOPN-06)
+- S01 branch diff (`git diff main..gsd/M002/S01`) — confirmed all S01 deliverables exist: `perf_1m` field, `compute_monthly_performance()`, `run_pipeline(top_n=)`, 12 tests
+- S01 task summaries (T01-SUMMARY.md, T02-SUMMARY.md on S01 branch) — confirmed verification passed, 357 total tests
+- Existing code: `scripts/run_screener.py`, `screener/display.py`, `tests/test_cli_screener.py`, `tests/test_display.py` — confirmed patterns for CLI options, table columns, and test approaches
