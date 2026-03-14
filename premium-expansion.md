@@ -338,46 +338,80 @@ The original Cloudflare plan (Pages + Workers + D1) had a fundamental problem: P
 
 **The right move: pick one platform that runs Python natively and handles everything.**
 
-### Architecture — Supabase + Railway
+### Architecture — Render + Supabase
+
+All services on Render. Supabase for auth, database, and encrypted secret storage.
+Next.js calls FastAPI over Render's private network — zero public internet hops, no CORS.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                         Vercel                                   │
+│                          Render                                   │
 │                                                                  │
 │  ┌────────────────────────────────────────────────────────────┐  │
-│  │  Next.js App (App Router, SSR)                             │  │
+│  │  Web Service 1: Next.js (App Router, SSR)                  │  │
 │  │  ├── Dashboard, Screener, Execution UI                     │  │
-│  │  ├── Server Actions → Python API                           │  │
+│  │  ├── Server Actions → FastAPI via private network          │  │
 │  │  ├── Stripe checkout + portal redirects                    │  │
 │  │  └── Supabase Auth (SSR client)                            │  │
+│  └────────────────────────┬───────────────────────────────────┘  │
+│                           │  Private network (10.x.x.x)          │
+│  ┌────────────────────────▼───────────────────────────────────┐  │
+│  │  Web Service 2: FastAPI + Uvicorn                          │  │
+│  │  ├── /api/screen/*   — screening endpoints                 │  │
+│  │  ├── /api/execute/*  — trade execution                     │  │
+│  │  ├── /api/llm/*      — LLM analysis agents                │  │
+│  │  ├── /api/keys/*     — Vault key management                │  │
+│  │  ├── /api/stripe/*   — ALL Stripe webhooks (single target) │  │
+│  │  ├── Alpaca SDK, ORATS, FMP clients                        │  │
+│  │  ├── LangChain + LiteLLM                                   │  │
+│  │  └── Per-user rate limiting (Redis counters)               │  │
+│  └──────────────┬─────────────────────────────────────────────┘  │
+│                 │                                                 │
+│  ┌──────────────▼─────────────────────────────────────────────┐  │
+│  │  Background Worker 1: Celery (screening + execution queue) │  │
+│  │  ├── Screening pipeline (FMP → ORATS → Alpaca)             │  │
+│  │  ├── Trade execution tasks                                 │  │
+│  │  ├── CELERY_TASK_TIME_LIMIT = 120                          │  │
+│  │  └── CELERY_TASK_ACKS_LATE = True (retry on crash)         │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │  Background Worker 2: Celery (llm queue)                   │  │
+│  │  ├── Screening analysis                                    │  │
+│  │  ├── Trade reasoning generation                            │  │
+│  │  ├── Risk metric computation                               │  │
+│  │  └── Market context briefs                                 │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │  Redis (Render managed)                                    │  │
+│  │  ├── Celery broker + result backend                        │  │
+│  │  ├── FMP/ORATS response cache (TTLs below)                 │  │
+│  │  │   ├── FMP /stock-screener: 15 min                       │  │
+│  │  │   ├── FMP /ratios-ttm: 24 hours                         │  │
+│  │  │   ├── ORATS /ivrank: 1 hour                             │  │
+│  │  │   ├── ORATS /cores: 1 hour                              │  │
+│  │  │   └── ORATS /strikes: 5 min                             │  │
+│  │  ├── LLM response cache                                    │  │
+│  │  │   ├── Screening analysis: 1 hour                        │  │
+│  │  │   ├── Market context: 4 hours                           │  │
+│  │  │   └── Risk metrics: 30 min                              │  │
+│  │  └── Per-user rate limiting counters                       │  │
+│  │      ├── Screening runs: 60/hour (premium), 3/day (free)   │  │
+│  │      ├── Trade execution: 10/min                           │  │
+│  │      └── LLM calls: 30/hour                                │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐  │
+│  │  Cron Jobs (Render-native, no Celery Beat needed)          │  │
+│  │  ├── Morning market brief: 8:30 AM ET weekdays             │  │
+│  │  ├── Position sync: every 30 min during market hours       │  │
+│  │  ├── Stale API key check: daily 6 AM ET                    │  │
+│  │  └── FMP/ORATS cache warm: 9:00 AM ET weekdays             │  │
 │  └────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────┘
          │
-         │  HTTPS
-         ▼
-┌──────────────────────────────────────────────────────────────────┐
-│                        Railway                                    │
-│                                                                  │
-│  ┌─────────────────────┐  ┌─────────────────────┐               │
-│  │  FastAPI App         │  │  Celery Worker       │               │
-│  │  ├── /api/screen/*   │  │  ├── screening jobs  │               │
-│  │  ├── /api/execute/*  │  │  ├── LLM inference   │               │
-│  │  ├── /api/llm/*      │  │  └── scheduled tasks │               │
-│  │  ├── Alpaca SDK      │  │                      │               │
-│  │  ├── ORATS / FMP     │  └──────────┬───────────┘               │
-│  │  ├── LangChain       │             │                           │
-│  │  └── LiteLLM         │             │                           │
-│  └──────────┬───────────┘             │                           │
-│             │                         │                           │
-│  ┌──────────▼─────────────────────────▼──────────┐               │
-│  │                    Redis                       │               │
-│  │  ├── Celery broker + result backend            │               │
-│  │  ├── LLM response cache                        │               │
-│  │  └── Rate limiting counters                    │               │
-│  └────────────────────────────────────────────────┘               │
-└──────────────────────────────────────────────────────────────────┘
-         │
-         │  Postgres connection (pooled)
+         │  Postgres connection (pooled via Supavisor)
          ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │                       Supabase                                    │
@@ -388,12 +422,12 @@ The original Cloudflare plan (Pages + Workers + D1) had a fundamental problem: P
 │  │  ├── Google   │  │  ├── trades  │  │  ├── FMP keys          │ │
 │  │  ├── GitHub   │  │  ├── runs    │  │  └── ORATS keys        │ │
 │  │  └── JWT      │  │  ├── configs │  │                        │ │
-│  │               │  │  └── RLS     │  │  (encrypted at rest,   │ │
-│  │               │  │              │  │   per-user isolation)  │ │
+│  │               │  │  └── RLS     │  │  Vault + app-layer     │ │
+│  │               │  │              │  │  envelope encryption   │ │
 │  └──────────────┘  └──────────────┘  └────────────────────────┘ │
 │                                                                  │
 │  ┌──────────────────────────────────────────────────────────────┐│
-│  │  Stripe Sync (webhook → Postgres)                            ││
+│  │  Stripe Sync (webhook → FastAPI → Postgres)                  ││
 │  │  ├── subscription status                                     ││
 │  │  ├── tier (free/premium)                                     ││
 │  │  └── usage metering                                          ││
@@ -405,15 +439,17 @@ The original Cloudflare plan (Pages + Workers + D1) had a fundamental problem: P
 
 | Concern | Solution | Why |
 |---------|----------|-----|
-| Frontend + SSR | **Vercel + Next.js** | Server actions call Python API directly. SSR for SEO on marketing pages. Free tier handles early traffic. |
-| Python backend | **Railway** | Native Python, auto-deploy from git, easy scaling, persistent containers (not serverless). ~$5/mo to start. |
-| LLM inference | **Railway (same container)** | LangChain + LiteLLM run in the FastAPI process or Celery workers. No cold starts. GPU not needed — we call external LLM APIs (OpenAI, Anthropic, etc.) via LiteLLM. |
+| Frontend + SSR | **Render Web Service (Next.js)** | Server Actions call FastAPI over private network — no public hop, no CORS. SSR for SEO on marketing pages. |
+| Python backend | **Render Web Service (FastAPI)** | Native Python, git push deploy, persistent containers. Private network access from Next.js. $7/mo Starter. |
+| LLM inference | **Render Background Worker** | Dedicated Celery queue for LLM tasks. LangChain + LiteLLM call external APIs (OpenAI, Anthropic). Isolated from screening jobs — one can't block the other. |
 | Database | **Supabase Postgres** | Row-Level Security for multi-tenant isolation. Managed Postgres, connection pooling via Supavisor, real-time subscriptions for live updates. Free tier: 500MB, 50k MAU. |
 | Auth | **Supabase Auth** | Email, Google, GitHub login. JWT-based. RLS policies use `auth.uid()` — no auth middleware to write. |
-| Secret storage | **Supabase Vault** | Per-user API keys (Alpaca, FMP, ORATS) encrypted at rest with `pgsodium`. Users' brokerage credentials never touch application memory except during API calls. |
-| Billing | **Stripe** | Checkout, customer portal, webhooks → Supabase Postgres for subscription state. |
-| Background jobs | **Celery + Redis on Railway** | Screening runs, LLM analysis, scheduled portfolio checks. Redis as broker. |
-| Caching | **Redis on Railway** | LLM response cache, screening result cache, rate limit counters. |
+| Secret storage | **Supabase Vault + envelope encryption** | Per-user API keys encrypted at rest via `pgsodium`, plus application-layer envelope encryption (per-user derived key). Even Supabase service role access alone can't decrypt raw keys. |
+| Billing | **Stripe → FastAPI (single webhook target)** | All Stripe webhooks route to FastAPI. No dual-path race conditions. Checkout, customer portal, idempotent event processing. |
+| Background jobs | **Celery + Redis on Render** | Two workers with separate queues: `screening+execution` and `llm`. Task timeouts, ack-late retries, dead letter queue. |
+| Caching | **Redis on Render** | FMP/ORATS response cache with TTLs, LLM response cache, per-user rate limit counters. Prevents blowing through API budgets at scale. |
+| Scheduling | **Render Cron Jobs** | Native cron — no Celery Beat. Morning briefs, position syncs, cache warming. |
+| Platform unity | **Everything on Render** | One dashboard, one billing, one deploy pipeline. Private networking between all services. Preview environments for PRs. |
 
 #### Why not Convex
 
@@ -421,6 +457,16 @@ Convex is excellent for real-time apps but wrong for this project:
 - **No Python** — Convex functions run in JS/TS. Our entire trading engine is Python. We'd need a separate Python backend anyway, recreating the Cloudflare split-brain problem.
 - **No raw SQL** — Convex uses a document model. Trade history, screening runs, and financial data are deeply relational (joins, aggregations, time-range queries).
 - **Vendor lock-in** — Supabase is open-source Postgres. If we outgrow Supabase hosted, we migrate to self-hosted Postgres. Convex has no self-hosted option.
+
+#### Why not Vercel + Railway
+
+Splitting frontend (Vercel) and backend (Railway) across two platforms creates:
+- **Cross-platform latency** — Next.js Server Actions must call the Python API over the public internet instead of a private network.
+- **CORS configuration** — public API requires CORS headers and additional auth checks.
+- **Two billing dashboards** — two platforms to monitor, two deploy pipelines to maintain.
+- **Coordinated deploys** — breaking API changes require syncing deploys across platforms.
+
+Render eliminates all of this. One platform, private networking, unified deploys.
 
 ### Database — Supabase Postgres
 
@@ -517,10 +563,27 @@ CREATE TABLE public.screening_runs (
     completed_at    TIMESTAMPTZ,
     symbol_count    INTEGER,
     pass_count      INTEGER,
-    results         JSONB,
     error           TEXT,
     -- LLM analysis
     llm_analysis    JSONB,                      -- AI-generated summary + reasoning
+    created_at      TIMESTAMPTZ DEFAULT now()
+);
+
+-- Normalized screening results (one row per result, queryable)
+CREATE TABLE public.screening_results (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    run_id          UUID NOT NULL REFERENCES public.screening_runs(id) ON DELETE CASCADE,
+    user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    symbol          TEXT NOT NULL,
+    underlying      TEXT NOT NULL,
+    score           NUMERIC,
+    annualized_return NUMERIC,
+    strike          NUMERIC,
+    expiration      DATE,
+    delta           NUMERIC,
+    iv_rank         NUMERIC,
+    premium         NUMERIC,
+    metadata        JSONB DEFAULT '{}',          -- additional per-result data (greeks, fundamentals)
     created_at      TIMESTAMPTZ DEFAULT now()
 );
 
@@ -549,7 +612,9 @@ CREATE TABLE public.trades (
     notes           TEXT,
     -- LLM reasoning
     llm_reasoning   TEXT,                       -- AI explanation for why this trade
-    executed_at     TIMESTAMPTZ DEFAULT now()
+    executed_at     TIMESTAMPTZ DEFAULT now(),
+    -- Soft delete (never hard-delete trade records — audit trail)
+    archived_at     TIMESTAMPTZ                  -- NULL = active, set = hidden from UI but preserved
 );
 
 -- Wheel state snapshots
@@ -598,6 +663,7 @@ ALTER TABLE public.user_api_keys ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.screener_configs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.watchlists ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.screening_runs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.screening_results ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.trades ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.wheel_positions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.usage_records ENABLE ROW LEVEL SECURITY;
@@ -618,6 +684,9 @@ CREATE POLICY "Users own their watchlists"
 CREATE POLICY "Users own their screening runs"
     ON public.screening_runs FOR ALL USING (auth.uid() = user_id);
 
+CREATE POLICY "Users own their screening results"
+    ON public.screening_results FOR ALL USING (auth.uid() = user_id);
+
 CREATE POLICY "Users own their trades"
     ON public.trades FOR ALL USING (auth.uid() = user_id);
 
@@ -632,21 +701,51 @@ CREATE POLICY "Users own their usage"
 -- ================================================================
 
 CREATE INDEX idx_trades_user_date ON public.trades (user_id, executed_at DESC);
+CREATE INDEX idx_trades_user_underlying ON public.trades (user_id, underlying);  -- cost basis lookups
 CREATE INDEX idx_screening_runs_user ON public.screening_runs (user_id, created_at DESC);
+CREATE INDEX idx_screening_results_run ON public.screening_results (run_id);
+CREATE INDEX idx_screening_results_user_symbol ON public.screening_results (user_id, symbol);
 CREATE INDEX idx_wheel_positions_user ON public.wheel_positions (user_id, underlying);
 CREATE INDEX idx_usage_user_date ON public.usage_records (user_id, created_at DESC);
 ```
 
-### Secret Management — Supabase Vault
+### Secret Management — Supabase Vault + Envelope Encryption
 
-User API keys (Alpaca key/secret, FMP, ORATS) are stored via Supabase Vault:
+User API keys (Alpaca key/secret, FMP, ORATS) use a two-layer encryption model.
+Supabase Vault alone relies on the service role key — if the FastAPI container is compromised, all user keys are exposed. Envelope encryption adds a per-user derived key so service role access alone isn't sufficient.
+
+#### Layer 1: Application-layer envelope encryption
+
+Before storing in Vault, encrypt the raw key with a per-user derived key:
+
+```python
+import hashlib
+from cryptography.fernet import Fernet
+import base64
+
+def derive_user_key(user_id: str, app_secret: str) -> bytes:
+    """Derive a per-user encryption key from user ID + app secret.
+    app_secret is stored in Render env vars, NOT in Supabase."""
+    dk = hashlib.pbkdf2_hmac('sha256', app_secret.encode(), user_id.encode(), 100_000)
+    return base64.urlsafe_b64encode(dk)
+
+def encrypt_for_user(user_id: str, app_secret: str, plaintext: str) -> str:
+    key = derive_user_key(user_id, app_secret)
+    return Fernet(key).encrypt(plaintext.encode()).decode()
+
+def decrypt_for_user(user_id: str, app_secret: str, ciphertext: str) -> str:
+    key = derive_user_key(user_id, app_secret)
+    return Fernet(key).decrypt(ciphertext.encode()).decode()
+```
+
+#### Layer 2: Supabase Vault encryption at rest
 
 ```sql
--- Store a user's Alpaca API key
+-- Store: envelope-encrypted ciphertext goes into Vault (not raw key)
 SELECT vault.create_secret(
-    'sk-live-abc123...',                -- the actual key value
-    'alpaca_api_key',                   -- name
-    'User xyz Alpaca API key'           -- description
+    'gAAAAABk...<envelope_encrypted>',  -- already encrypted by app layer
+    'alpaca_api_key',                    -- name
+    'User xyz Alpaca API key'            -- description
 );
 -- Returns a secret UUID → stored in user_api_keys.vault_secret_id
 
@@ -654,14 +753,34 @@ SELECT vault.create_secret(
 SELECT decrypted_secret
 FROM vault.decrypted_secrets
 WHERE id = '<vault_secret_id>';
+-- Returns envelope-encrypted ciphertext, NOT the raw key
+-- App must then call decrypt_for_user() to get the actual key
 ```
 
-**Security model:**
+#### Security model
+
+- **Two keys required to decrypt:** Supabase service role (Vault layer) + APP_ENCRYPTION_SECRET (Render env var, app layer). Compromising either one alone is insufficient.
 - Raw keys are never stored in application tables — only Vault references (UUIDs)
 - Vault uses `pgsodium` for encryption at rest
-- Decryption happens server-side only — the Python backend reads keys via Supabase service role, never exposed to the frontend
-- RLS ensures users can only see their own `user_api_keys` rows (but can't decrypt — that requires service role)
+- Decryption happens server-side only — the Python backend reads envelope-encrypted ciphertext via Supabase service role, then decrypts with the per-user derived key
+- RLS ensures users can only see their own `user_api_keys` rows (but can't decrypt — that requires service role + app secret)
 - Keys are decrypted only for the duration of an API call, then discarded from memory
+- **Audit trail:** Every Vault read is logged to `vault_access_log` table with user_id, provider, timestamp, and calling endpoint
+- **Rotation:** APP_ENCRYPTION_SECRET can be rotated by re-encrypting all Vault entries in a background migration
+
+#### Vault access logging
+
+```sql
+CREATE TABLE public.vault_access_log (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         UUID NOT NULL REFERENCES auth.users(id),
+    provider        TEXT NOT NULL,
+    endpoint        TEXT NOT NULL,    -- which API endpoint triggered the read
+    accessed_at     TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_vault_access_user ON public.vault_access_log (user_id, accessed_at DESC);
+```
 
 ### LLM Integration — LangChain + LiteLLM
 
@@ -693,17 +812,26 @@ LangChain orchestrates multi-step LLM workflows:
 - Stored in `trades.llm_reasoning` for trade journal
 - Tier: premium only
 
-**3. Portfolio Risk Agent**
+**3. Portfolio Risk Metrics Agent**
 - Input: current wheel positions, account exposure, sector breakdown
-- Output: risk assessment — concentration risk, correlation risk, max drawdown scenario, position sizing recommendations
+- Output: risk metrics report — concentration %, sector correlation, max drawdown scenario, buying power utilization
+- Reports numbers and facts only. Does NOT recommend position sizes or suggest trades. Users interpret the metrics and decide.
+- Example output: "3 of 5 positions are in tech (60% concentration). Portfolio delta is -1.8. If SPY drops 5%, estimated loss is $X based on current positions."
 - Runs on demand from dashboard
 - Tier: premium only
 
 **4. Market Context Agent**
 - Input: watchlist symbols, recent price action, earnings calendar, IV rank data
-- Output: "market brief" — which watchlist stocks look interesting today and why
-- Can run on schedule (morning brief) via Celery beat
+- Output: "market brief" — which watchlist stocks have notable activity today (IV rank spikes, unusual volume, earnings proximity, news events)
+- Reports facts and data points. Does NOT say stocks "look interesting" or are "good opportunities." Uses language like "notable activity," "elevated IV rank," "approaching earnings."
+- Can run on schedule (morning brief) via Render cron job
 - Tier: premium only (free tier gets basic screening without AI commentary)
+
+**Regulatory language rules for ALL agents:**
+- Never use: "recommend," "suggest," "you should," "best option," "opportunity"
+- Always use: "data shows," "metrics indicate," "notable activity," "based on your filters"
+- Every LLM response includes footer: "AI-generated analysis for informational purposes only. Not investment advice."
+- Agent system prompts explicitly instruct the model to report data, not recommend actions
 
 #### Caching
 
@@ -711,7 +839,7 @@ LLM responses cached in Redis with TTL:
 - Screening analysis: 1 hour (results don't change until re-screened)
 - Market context: 4 hours (refreshed a few times per trading day)
 - Trade reasoning: permanent (stored in DB, not re-generated)
-- Risk analysis: 30 minutes (positions can change)
+- Risk metrics: 30 minutes (positions can change)
 
 ### Stripe Billing
 
@@ -742,7 +870,7 @@ Stripe Checkout → creates subscription → webhook → Supabase
 ```
 
 - **Checkout:** Next.js server action creates Stripe checkout session, redirects user
-- **Webhooks:** `POST /api/stripe/webhook` on the Python backend (or Next.js API route)
+- **Webhooks:** `POST /api/stripe/webhook` on FastAPI ONLY (single webhook target — no dual-path race conditions)
   - `checkout.session.completed` → set tier to premium
   - `invoice.payment_succeeded` → confirm active
   - `invoice.payment_failed` → set status to past_due
@@ -751,7 +879,7 @@ Stripe Checkout → creates subscription → webhook → Supabase
 - **Customer portal:** Stripe-hosted portal for billing management (cancel, update payment, view invoices)
 - **Idempotency:** `stripe_events` table deduplicates webhook replays
 
-### Python Backend — FastAPI on Railway
+### Python Backend — FastAPI on Render
 
 #### Endpoints (expanded from original)
 
@@ -804,14 +932,15 @@ GET    /api/chain/{symbol}       Option chain with greeks
 
 #### Key design decisions (updated)
 
-- **No auto-execute** — GUI shows recommendations, user selects and confirms. Execution endpoints require a confirmation token (generated client-side after user reviews the order summary).
-- **Per-user Alpaca credentials** — every Alpaca API call uses the requesting user's keys, decrypted from Vault for the duration of the call. No shared brokerage account.
+- **No auto-execute** — GUI shows screener matches, user selects and confirms. Execution endpoints require a confirmation token (generated client-side after user reviews the order summary).
+- **Per-user Alpaca credentials** — every Alpaca API call uses the requesting user's keys, decrypted from Vault (envelope + pgsodium) for the duration of the call. No shared brokerage account. Consider Alpaca OAuth as primary auth path (scoped permissions, revocable) with raw API keys as fallback.
 - **Tier enforcement in middleware** — FastAPI dependency checks `user.tier` before premium endpoints. Returns 403 with upgrade prompt.
-- **Screening is async** — Celery task, results stored in `screening_runs`. Client polls or connects via WebSocket.
-- **LLM calls are async** — Celery tasks with Redis caching. Results stored in DB for re-display.
-- **Stateless backend** — all persistent state in Supabase Postgres. Redis for ephemeral state only. Railway containers can be restarted/scaled freely.
+- **Screening is async** — Celery task on `screening` queue, results stored in `screening_runs` + `screening_results`. Client polls or connects via WebSocket.
+- **LLM calls are async** — Celery tasks on `llm` queue with Redis caching. Results stored in DB for re-display. Isolated from screening — separate worker.
+- **Stateless backend** — all persistent state in Supabase Postgres. Redis for ephemeral state only. Render services can be restarted/scaled freely.
+- **Per-user rate limiting** — Redis sliding window counters. Screening: 60/hour premium, 3/day free. Execution: 10/min. LLM: 30/hour. Prevents single user from burning API budgets.
 
-### Frontend — Next.js on Vercel
+### Frontend — Next.js on Render
 
 #### Pages / Views (expanded)
 
@@ -861,22 +990,23 @@ GET    /api/chain/{symbol}       Option chain with greeks
 - Upgrade/downgrade button → Stripe checkout/portal
 - Invoice history
 
-#### Tech Stack (unchanged)
+#### Tech Stack
 
-- **Next.js 15** (App Router, Server Actions for Stripe/auth flows)
+- **Next.js 15** (App Router, Server Actions for Stripe checkout + auth flows)
 - **Tailwind CSS + shadcn/ui** — component library
 - **TanStack Table** — sortable/filterable results
-- **TanStack Query** — server state, polling
+- **TanStack Query** — server state, polling, WebSocket integration
 - **Recharts** — P&L charts, IV visualization
 - **Zustand** — local UI state
 - **Supabase JS client** — auth, real-time subscriptions
+- **Private network API client** — `api.ts` calls FastAPI via Render internal URL (`http://wheely-api:8000`), never public internet
 
 ### Deployment Architecture
 
 ```
 wheeely/
 ├── apps/
-│   ├── web/                      # Next.js app → Vercel
+│   ├── web/                      # Next.js app → Render Web Service
 │   │   ├── app/
 │   │   │   ├── (marketing)/      # Landing, pricing (SSR)
 │   │   │   ├── (app)/            # Authenticated app shell
@@ -890,7 +1020,7 @@ wheeely/
 │   │   │   │   └── billing/
 │   │   │   └── api/
 │   │   │       └── stripe/
-│   │   │           └── webhook/route.ts
+│   │   │           └── checkout/route.ts  # Creates session, redirects only
 │   │   ├── components/
 │   │   │   ├── ui/               # shadcn
 │   │   │   ├── screener/
@@ -898,21 +1028,25 @@ wheeely/
 │   │   │   ├── execution/
 │   │   │   └── billing/
 │   │   └── lib/
-│   │       ├── api.ts            # Python backend client
+│   │       ├── api.ts            # FastAPI client (private network URL)
 │   │       ├── supabase/         # Auth + DB client
-│   │       └── stripe.ts         # Stripe helpers
+│   │       └── stripe.ts         # Stripe checkout helpers only
 │   │
-│   └── api/                      # FastAPI app → Railway
+│   └── api/                      # FastAPI app → Render Web Service
 │       ├── main.py               # FastAPI entry point
 │       ├── auth/                 # Supabase JWT verification
-│       ├── billing/              # Stripe integration
+│       ├── billing/              # Stripe webhooks + subscription mgmt
 │       ├── llm/                  # LangChain agents, LiteLLM config
 │       ├── routers/              # API route modules
-│       ├── vault/                # Supabase Vault key management
+│       ├── vault/                # Supabase Vault + envelope encryption
 │       ├── tasks/                # Celery task definitions
+│       │   ├── screening.py      # screening + execution queue tasks
+│       │   └── llm.py            # llm queue tasks
+│       ├── cache/                # Redis caching layer (FMP/ORATS TTLs)
+│       ├── ratelimit/            # Per-user rate limiting middleware
 │       ├── screener/             # Existing screener code (moved)
 │       ├── core/                 # Existing strategy code (moved)
-│       └── celery_app.py         # Celery configuration
+│       └── celery_app.py         # Celery config: 3 queues (screening, execution, llm)
 │
 ├── packages/
 │   └── shared/                   # Shared types, constants
@@ -925,30 +1059,155 @@ wheeely/
 │   │   └── ...
 │   └── config.toml               # Supabase project config
 │
+├── render.yaml                   # Render Blueprint — all services as code
 ├── docker-compose.yml            # Local dev: Postgres, Redis, API, Worker
 └── turbo.json                    # Monorepo build config (Turborepo)
 ```
 
-**Railway services:**
+**render.yaml (Render Blueprint — infrastructure as code):**
 
-| Service | What | Scaling |
-|---------|------|---------|
-| `api` | FastAPI + uvicorn | 1 instance to start, horizontal scale later |
-| `worker` | Celery worker | 1 instance, scale with queue depth |
-| `redis` | Redis 7 | Railway managed plugin |
+```yaml
+services:
+  # --- Next.js Frontend ---
+  - type: web
+    name: wheely-web
+    runtime: node
+    repo: https://github.com/your-org/wheely
+    rootDir: apps/web
+    buildCommand: npm run build
+    startCommand: npm run start
+    plan: starter         # $7/mo
+    envVars:
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: API_BASE_URL
+        fromService:
+          name: wheely-api
+          type: web
+          property: hostport    # private network address
+      - key: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+        sync: false
+
+  # --- FastAPI Backend ---
+  - type: web
+    name: wheely-api
+    runtime: python
+    repo: https://github.com/your-org/wheely
+    rootDir: apps/api
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port 8000
+    plan: starter         # $7/mo
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: APP_ENCRYPTION_SECRET
+        sync: false       # for envelope encryption
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          name: wheely-redis
+          type: redis
+          property: connectionString
+      - key: FMP_API_KEY
+        sync: false
+      - key: ORATS_API_TOKEN
+        sync: false
+      - key: LITELLM_API_KEY
+        sync: false
+
+  # --- Celery Worker 1: Screening + Execution ---
+  - type: worker
+    name: wheely-worker-screening
+    runtime: python
+    repo: https://github.com/your-org/wheely
+    rootDir: apps/api
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A celery_app worker -Q screening,execution --concurrency=2
+    plan: starter         # $7/mo
+    envVars:
+      - key: REDIS_URL
+        fromService:
+          name: wheely-redis
+          type: redis
+          property: connectionString
+      # ... same Supabase + API keys as wheely-api
+
+  # --- Celery Worker 2: LLM ---
+  - type: worker
+    name: wheely-worker-llm
+    runtime: python
+    repo: https://github.com/your-org/wheely
+    rootDir: apps/api
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A celery_app worker -Q llm --concurrency=4
+    plan: starter         # $7/mo
+    envVars:
+      - key: REDIS_URL
+        fromService:
+          name: wheely-redis
+          type: redis
+          property: connectionString
+      # ... same LiteLLM + Supabase keys
+
+  # --- Redis ---
+  - type: redis
+    name: wheely-redis
+    plan: starter         # $10/mo
+    maxmemoryPolicy: allkeys-lru
+
+# --- Cron Jobs ---
+cronJobs:
+  - name: morning-brief
+    schedule: "30 13 * * 1-5"    # 8:30 AM ET weekdays (UTC)
+    command: python -m tasks.cron.morning_brief
+    rootDir: apps/api
+  - name: position-sync
+    schedule: "*/30 13-20 * * 1-5"  # every 30 min during market hours (UTC)
+    command: python -m tasks.cron.position_sync
+    rootDir: apps/api
+  - name: cache-warm
+    schedule: "0 14 * * 1-5"     # 9:00 AM ET weekdays (UTC)
+    command: python -m tasks.cron.cache_warm
+    rootDir: apps/api
+  - name: stale-key-check
+    schedule: "0 11 * * *"       # 6:00 AM ET daily (UTC)
+    command: python -m tasks.cron.stale_key_check
+    rootDir: apps/api
+```
+
+**Render services:**
+
+| Service | Type | Plan | What |
+|---------|------|------|------|
+| `wheely-web` | Web Service | Starter ($7/mo) | Next.js frontend, SSR |
+| `wheely-api` | Web Service | Starter ($7/mo) | FastAPI, all API endpoints |
+| `wheely-worker-screening` | Background Worker | Starter ($7/mo) | Celery: screening + execution queues |
+| `wheely-worker-llm` | Background Worker | Starter ($7/mo) | Celery: llm queue |
+| `wheely-redis` | Redis | Starter ($10/mo) | Broker, cache, rate limits |
+| Cron Jobs | Cron | Included | Morning briefs, position sync, cache warming |
+
+**Note on Render Starter tier:** 512MB RAM per service. Monitor memory usage on the screening worker — screening pipelines with pandas DataFrames + ORATS data can spike. Upgrade to Standard ($25/mo) if OOM kills occur.
 
 **Costs at launch:**
 
 | Service | Cost |
 |---------|------|
-| Vercel (free tier) | $0 |
-| Railway (api + worker + redis) | ~$10-20/mo |
+| Render (web ×2 + worker ×2 + redis) | ~$38/mo |
 | Supabase (free tier: 500MB, 50k MAU) | $0 |
 | Stripe | 2.9% + 30¢ per transaction |
 | FMP | $99/mo |
 | ORATS | $99/mo |
 | LLM API costs (OpenAI/Anthropic) | ~$20-50/mo depending on usage |
-| **Total** | ~$230-270/mo |
+| **Total** | ~$260-290/mo |
+
+**Breakeven:** ~10 premium subscribers at $29/mo covers infrastructure. FMP/ORATS API response caching (Redis TTLs above) is critical — without it, ORATS 20K/month budget is exhausted around 15-20 active users. With caching, extends to ~80-100 active users before needing a plan upgrade.
 
 ### Migration path from CLI
 
@@ -959,53 +1218,71 @@ CLI tools (`run-strategy`, `run-screener`, `run-call-screener`) remain functiona
 3. SaaS users' configs/watchlists live in Supabase, API keys in Vault
 4. Same screening and strategy engine — two interfaces
 
-### Implementation phases (revised)
+### Implementation phases (revised for Render)
 
-**Phase 1 — Monorepo + FastAPI backend**
+**Phase 1 — Monorepo + Render deploy**
 - Set up Turborepo monorepo structure
 - Move existing screener/strategy code into `apps/api/`
 - FastAPI wrapping existing functions
-- Deploy to Railway, test with curl
+- Write `render.yaml` Blueprint
+- Deploy to Render, test with curl over private network
 
-**Phase 2 — Supabase + Auth**
-- Supabase project, run migrations
+**Phase 2 — Supabase + Auth + Secret Hardening**
+- Supabase project, run migrations (including `screening_results`, `vault_access_log`)
 - Supabase Auth (email + OAuth)
-- Vault integration for API key storage
-- RLS policies verified
+- Vault integration with envelope encryption (APP_ENCRYPTION_SECRET in Render env)
+- RLS policies verified (including new `screening_results` table)
+- Vault access audit logging
 
 **Phase 3 — Frontend MVP**
-- Next.js app with Supabase Auth
+- Next.js app on Render with Supabase Auth
 - Dashboard: wheel state + account summary
 - Put screener: filter controls + results table + execute
 - Call screener: results + execute
-- API key settings page
-- Deploy to Vercel
+- API key settings page (with Alpaca OAuth flow as primary, raw keys as fallback)
+- Private network connection to FastAPI verified
 
 **Phase 4 — Stripe billing**
 - Stripe products + prices (free/premium)
-- Checkout flow + webhook handler
+- Checkout flow (Next.js) + webhook handler (FastAPI ONLY — single target)
 - Tier enforcement in FastAPI middleware
+- Per-user rate limiting (Redis sliding windows)
 - Billing page in frontend
 
 **Phase 5 — LLM integration**
 - LiteLLM config + model routing
-- Celery tasks for async LLM calls
+- Celery tasks on dedicated `llm` queue (Worker 2)
 - Screening analysis agent
 - Trade reasoning agent
 - Redis caching for LLM responses
+- Regulatory language guardrails in all agent system prompts
 
 **Phase 6 — Full features**
 - Watchlist manager
 - Trade journal with AI reasoning
 - P&L charts
 - History views
-- Portfolio risk agent
-- Market brief (scheduled)
+- Portfolio risk metrics agent (reports data, no recommendations)
+- Market context brief (Render cron job, reports activity, no recommendations)
 
-**Phase 7 — Polish + Scale**
+**Phase 7 — Caching + Scale**
+- FMP/ORATS Redis response caching with TTLs
+- Cache warming cron job (pre-market)
+- Monitor Render Starter memory usage, upgrade workers if needed
 - WebSocket for real-time screening progress
 - Mobile-responsive layout
 - Dark/light theme
-- Rate limiting + abuse prevention
-- Monitoring + alerting (Sentry, Railway metrics)
+- Monitoring + alerting (Sentry, Render metrics)
 - Load testing + horizontal scaling plan
+
+**Phase 8 — Scale triggers**
+
+When to upgrade from launch architecture:
+
+| Trigger | Action |
+|---------|--------|
+| Worker OOM kills | Upgrade Render Starter → Standard ($25/mo per service) |
+| ORATS 20K/month approaching | Upgrade ORATS plan or add user-provided keys |
+| >50 concurrent screening runs | Add Worker 3 (second screening worker) |
+| >100 active users | Supabase free → Pro ($25/mo), add connection pooling |
+| Need compliance audit trail | Migrate Vault to AWS Secrets Manager |
