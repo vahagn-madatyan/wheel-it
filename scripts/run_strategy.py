@@ -22,7 +22,6 @@ from config.credentials import ALPACA_API_KEY, ALPACA_SECRET_KEY, IS_PAPER
 from config.credentials import require_finnhub_key
 from config.params import MAX_RISK
 from core.broker_client import BrokerClient
-from core.execution import sell_puts, sell_calls
 from core.state_manager import update_state, calculate_risk
 from logging.logger_setup import setup_logger
 from logging.strategy_logger import StrategyLogger
@@ -36,6 +35,7 @@ from screener.display import (
 from screener.export import export_symbols, get_protected_symbols
 from screener.finnhub_client import FinnhubClient
 from screener.pipeline import run_pipeline
+from screener.put_screener import screen_puts
 
 logger = stdlib_logging.getLogger(__name__)
 
@@ -152,11 +152,11 @@ def run(
         states = update_state(positions)
         strat_logger.add_state_dict(states)
 
-        # Load screener config for call screening thresholds
+        # Load screener config for call/put screening thresholds
         try:
-            call_config = load_config()
+            screener_config = load_config()
         except Exception:
-            call_config = None
+            screener_config = None
 
         for symbol, state in states.items():
             if state["type"] == "long_shares":
@@ -175,7 +175,7 @@ def run(
                     client.option_client,
                     symbol,
                     state["price"],
-                    config=call_config,
+                    config=screener_config,
                 )
                 if recommendations:
                     best = recommendations[0]
@@ -209,7 +209,58 @@ def run(
     strat_logger.set_allowed_symbols(allowed_symbols)
 
     std_logger.info(f"Current buying power is ${buying_power}")
-    sell_puts(client, allowed_symbols, buying_power, strat_logger)
+
+    # Use put screener to find and sell cash-secured puts
+    try:
+        put_config = load_config()
+    except Exception:
+        put_config = None
+
+    put_recommendations = screen_puts(
+        client.trade_client,
+        client.option_client,
+        allowed_symbols,
+        buying_power,
+        config=put_config,
+        stock_client=client.stock_client,
+    )
+
+    if put_recommendations:
+        remaining_bp = buying_power
+        for rec in put_recommendations:
+            capital_required = 100 * rec.strike
+            if remaining_bp < capital_required:
+                std_logger.info(
+                    "Buying power exhausted ($%.2f remaining, need $%.2f for %s)",
+                    remaining_bp,
+                    capital_required,
+                    rec.symbol,
+                )
+                break
+            std_logger.info(
+                "Selling put: %s (underlying=%s, strike=$%.2f, DTE=%d, "
+                "premium=$%.2f, ann.return=%.1f%%)",
+                rec.symbol,
+                rec.underlying,
+                rec.strike,
+                rec.dte,
+                rec.premium,
+                rec.annualized_return,
+            )
+            client.market_sell(rec.symbol)
+            remaining_bp -= capital_required
+            if strat_logger:
+                strat_logger.log_sold_puts([{
+                    "symbol": rec.symbol,
+                    "underlying": rec.underlying,
+                    "strike": rec.strike,
+                    "dte": rec.dte,
+                    "premium": rec.premium,
+                    "delta": rec.delta,
+                    "annualized_return": rec.annualized_return,
+                }])
+    else:
+        std_logger.info("No put recommendations found for allowed symbols.")
 
     strat_logger.save()
 

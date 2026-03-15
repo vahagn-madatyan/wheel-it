@@ -798,3 +798,59 @@ class TestPresetThresholds:
 
         assert len(result_moderate) == 1
         assert len(result_conservative) == 0
+
+
+# ---------------------------------------------------------------------------
+# CLI tests
+# ---------------------------------------------------------------------------
+
+
+class TestPutScreenerCLI:
+    """Tests for the run-put-screener CLI entry point."""
+
+    def test_cli_help(self):
+        from typer.testing import CliRunner
+        from scripts.run_put_screener import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        assert "--buying-power" in result.output
+        assert "--preset" in result.output
+        assert "--config" in result.output
+        assert "SYMBOLS" in result.output
+
+    @patch("scripts.run_put_screener.create_broker_client")
+    @patch("scripts.run_put_screener.screen_puts", return_value=[])
+    @patch("scripts.run_put_screener.render_put_results_table")
+    @patch("scripts.run_put_screener.load_config")
+    def test_cli_symbol_uppercased(self, mock_config, mock_render, mock_screen, mock_broker):
+        from typer.testing import CliRunner
+        from scripts.run_put_screener import app
+
+        mock_config.return_value = ScreenerConfig()
+        mock_broker.return_value = MagicMock()
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["aapl", "msft", "--buying-power", "50000"])
+        assert result.exit_code == 0
+        # Check symbols were uppercased
+        call_args = mock_screen.call_args
+        symbols_arg = call_args[0][2]  # 3rd positional arg
+        assert symbols_arg == ["AAPL", "MSFT"]
+
+    @patch("scripts.run_put_screener.create_broker_client")
+    @patch("scripts.run_put_screener.screen_puts", return_value=[])
+    @patch("scripts.run_put_screener.render_put_results_table")
+    @patch("scripts.run_put_screener.load_preset")
+    def test_cli_preset_override(self, mock_load_preset, mock_render, mock_screen, mock_broker):
+        from typer.testing import CliRunner
+        from scripts.run_put_screener import app
+
+        mock_load_preset.return_value = {"preset": "conservative"}
+        mock_broker.return_value = MagicMock()
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["AAPL", "--buying-power", "50000", "--preset", "conservative"])
+        assert result.exit_code == 0
+        mock_load_preset.assert_called_once_with("conservative")

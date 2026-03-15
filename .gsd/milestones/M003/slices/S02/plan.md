@@ -26,14 +26,14 @@
 
 ## Tasks
 
-- [ ] **T01: Build run-put-screener CLI entry point** `est:45m`
+- [x] **T01: Build run-put-screener CLI entry point** `est:45m`
   - Why: Standalone CLI for exploring put opportunities — mirrors `run-call-screener` pattern
   - Files: `scripts/run_put_screener.py` (new), `pyproject.toml`, `tests/test_put_screener.py`
   - Do: Create Typer app with `symbols` (variadic positional args), `--buying-power` (required float), `--preset` (optional enum), `--config` (optional path). Load config using same `load_config`/`load_preset`/`deep_merge` pattern as call screener CLI. Call `screen_puts()` and `render_put_results_table()`. Register `run-put-screener` in `pyproject.toml` `[project.scripts]`. Write CLI tests: help text, flag parsing, symbol uppercasing.
   - Verify: `run-put-screener --help` shows flags; `python -m pytest tests/test_put_screener.py -v`
   - Done when: `run-put-screener --help` works and CLI tests pass
 
-- [ ] **T02: Wire screen_puts() into run-strategy and remove sell_puts/sell_calls imports** `est:45m`
+- [x] **T02: Wire screen_puts() into run-strategy and remove sell_puts/sell_calls imports** `est:45m`
   - Why: Replaces the last legacy code path with the modern screener
   - Files: `scripts/run_strategy.py`, `tests/test_cli_strategy.py`
   - Do: Remove `from core.execution import sell_puts, sell_calls`. Import `screen_puts` from `screener.put_screener`. Replace `sell_puts(client, allowed_symbols, buying_power, strat_logger)` with: load screener config, call `screen_puts(client.trade_client, client.option_client, allowed_symbols, buying_power, config=cfg)`, iterate recommendations calling `client.market_sell(rec.symbol)` and deducting `100 * rec.strike` from buying_power until exhausted. Log each put sold with details. Update strategy logger calls. Write/update tests: strategy invokes `screen_puts`, no recommendations does not crash, buying power exhaustion stops iteration.

@@ -721,7 +721,7 @@ class TestStrategyIntegration:
 
     @patch("scripts.run_strategy.screen_calls")
     @patch("scripts.run_strategy.load_config")
-    @patch("scripts.run_strategy.sell_puts")
+    @patch("scripts.run_strategy.screen_puts", return_value=[])
     @patch("scripts.run_strategy.update_state")
     @patch("scripts.run_strategy.calculate_risk")
     def test_long_shares_triggers_call_screener(
@@ -788,7 +788,7 @@ class TestStrategyIntegration:
 
     @patch("scripts.run_strategy.screen_calls")
     @patch("scripts.run_strategy.load_config")
-    @patch("scripts.run_strategy.sell_puts")
+    @patch("scripts.run_strategy.screen_puts", return_value=[])
     @patch("scripts.run_strategy.update_state")
     @patch("scripts.run_strategy.calculate_risk")
     def test_no_recommendations_does_not_sell(
@@ -830,7 +830,7 @@ class TestStrategyIntegration:
 
     @patch("scripts.run_strategy.screen_calls")
     @patch("scripts.run_strategy.load_config")
-    @patch("scripts.run_strategy.sell_puts")
+    @patch("scripts.run_strategy.screen_puts", return_value=[])
     @patch("scripts.run_strategy.update_state")
     @patch("scripts.run_strategy.calculate_risk")
     def test_insufficient_shares_skips_call_screening(

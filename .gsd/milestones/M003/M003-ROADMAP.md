@@ -56,7 +56,7 @@ This milestone is complete only when all are true:
 - [x] **S01: Put Screener Module** `risk:medium` `depends:[]`
   > After this: `screen_puts(trade_client, option_client, ["AAPL", "MSFT"], 50000.0, config)` returns a sorted list of `PutRecommendation` objects — one per underlying, ranked by annualized return — with buying power pre-filtering, OI/spread/delta filters, and multi-symbol pagination all working. Verified by 40+ unit tests covering math, filtering, pagination, one-per-underlying selection, and edge cases.
 
-- [ ] **S02: Put Screener CLI + Strategy Integration** `risk:medium` `depends:[S01]`
+- [x] **S02: Put Screener CLI + Strategy Integration** `risk:medium` `depends:[S01]`
   > After this: User runs `run-put-screener AAPL MSFT GOOG --buying-power 50000` and sees a Rich table of put recommendations. Running `run-strategy` uses `screen_puts()` for the put-selling leg instead of the legacy `sell_puts()` path. Verified by CLI tests and strategy integration tests.
 
 - [ ] **S03: Legacy Code Removal + Docs Update** `risk:low` `depends:[S02]`

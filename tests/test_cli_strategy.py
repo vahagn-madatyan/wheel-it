@@ -51,8 +51,7 @@ def test_existing_flags_preserved():
 @patch("scripts.run_strategy.render_stage_summary")
 @patch("scripts.run_strategy.get_protected_symbols", return_value={})
 @patch("scripts.run_strategy.export_symbols")
-@patch("scripts.run_strategy.sell_puts")
-@patch("scripts.run_strategy.sell_calls")
+@patch("scripts.run_strategy.screen_puts", return_value=[])
 @patch("scripts.run_strategy.calculate_risk", return_value=0)
 @patch("scripts.run_strategy.update_state", return_value={})
 @patch("scripts.run_strategy.StrategyLogger")
@@ -65,8 +64,7 @@ def test_screen_flag_runs_screener_first(
     mock_strat_logger_cls,
     mock_update_state,
     mock_calc_risk,
-    mock_sell_calls,
-    mock_sell_puts,
+    mock_screen_puts,
     mock_export,
     mock_get_protected,
     mock_stage_summary,
@@ -78,8 +76,6 @@ def test_screen_flag_runs_screener_first(
     mock_load_config,
 ):
     """--screen flag runs screener pipeline before strategy execution."""
-    from screener.config_loader import ScreenerConfig
-
     mock_load_config.return_value = ScreenerConfig()
 
     mock_broker = MagicMock()
@@ -103,8 +99,8 @@ def test_screen_flag_runs_screener_first(
     # Results were displayed
     mock_results_table.assert_called_once()
     mock_stage_summary.assert_called_once()
-    # Strategy execution proceeded (sell_puts called)
-    mock_sell_puts.assert_called_once()
+    # Put screener called (replaces old sell_puts)
+    mock_screen_puts.assert_called_once()
 
 
 @patch("scripts.run_strategy.BrokerClient")
@@ -127,3 +123,128 @@ def test_config_error_shows_panel_with_screen(
     assert "Configuration Error" in result.output
     assert "Traceback" not in result.output
     assert "config/presets/" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Strategy integration tests for screen_puts()
+# ---------------------------------------------------------------------------
+
+
+@patch("scripts.run_strategy.load_config")
+@patch("scripts.run_strategy.screen_puts", return_value=[])
+@patch("scripts.run_strategy.calculate_risk", return_value=0)
+@patch("scripts.run_strategy.update_state", return_value={})
+@patch("scripts.run_strategy.StrategyLogger")
+@patch("scripts.run_strategy.setup_logger")
+@patch("scripts.run_strategy.BrokerClient")
+@patch("builtins.open", mock_open(read_data="AAPL\nMSFT\n"))
+def test_strategy_calls_screen_puts_not_sell_puts(
+    mock_broker_cls,
+    mock_setup_logger,
+    mock_strat_logger_cls,
+    mock_update_state,
+    mock_calc_risk,
+    mock_screen_puts,
+    mock_load_config,
+):
+    """Strategy calls screen_puts() instead of the old sell_puts()."""
+    mock_load_config.return_value = ScreenerConfig()
+    mock_broker = MagicMock()
+    mock_broker.get_positions.return_value = []
+    mock_broker_cls.return_value = mock_broker
+    mock_strat_logger_cls.return_value = MagicMock()
+    mock_setup_logger.return_value = MagicMock()
+
+    result = runner.invoke(app, [])
+    assert result.exit_code == 0
+    mock_screen_puts.assert_called_once()
+
+
+@patch("scripts.run_strategy.load_config")
+@patch("scripts.run_strategy.screen_puts")
+@patch("scripts.run_strategy.calculate_risk", return_value=0)
+@patch("scripts.run_strategy.update_state", return_value={})
+@patch("scripts.run_strategy.StrategyLogger")
+@patch("scripts.run_strategy.setup_logger")
+@patch("scripts.run_strategy.BrokerClient")
+@patch("builtins.open", mock_open(read_data="AAPL\nMSFT\n"))
+def test_strategy_sells_put_recommendations(
+    mock_broker_cls,
+    mock_setup_logger,
+    mock_strat_logger_cls,
+    mock_update_state,
+    mock_calc_risk,
+    mock_screen_puts,
+    mock_load_config,
+):
+    """Strategy iterates put recommendations and calls market_sell for each."""
+    from screener.put_screener import PutRecommendation
+
+    mock_load_config.return_value = ScreenerConfig()
+
+    rec = PutRecommendation(
+        symbol="AAPL250418P00170000",
+        underlying="AAPL",
+        strike=170.0,
+        dte=30,
+        premium=2.50,
+        delta=-0.22,
+        oi=500,
+        spread=0.04,
+        annualized_return=17.89,
+    )
+    mock_screen_puts.return_value = [rec]
+
+    mock_broker = MagicMock()
+    mock_broker.get_positions.return_value = []
+    mock_broker_cls.return_value = mock_broker
+    mock_strat_logger_cls.return_value = MagicMock()
+    mock_setup_logger.return_value = MagicMock()
+
+    result = runner.invoke(app, [])
+    assert result.exit_code == 0
+    mock_broker.market_sell.assert_called_once_with("AAPL250418P00170000")
+
+
+@patch("scripts.run_strategy.load_config")
+@patch("scripts.run_strategy.screen_puts", return_value=[])
+@patch("scripts.run_strategy.calculate_risk", return_value=0)
+@patch("scripts.run_strategy.update_state", return_value={})
+@patch("scripts.run_strategy.StrategyLogger")
+@patch("scripts.run_strategy.setup_logger")
+@patch("scripts.run_strategy.BrokerClient")
+@patch("builtins.open", mock_open(read_data="AAPL\nMSFT\n"))
+def test_empty_recommendations_no_crash(
+    mock_broker_cls,
+    mock_setup_logger,
+    mock_strat_logger_cls,
+    mock_update_state,
+    mock_calc_risk,
+    mock_screen_puts,
+    mock_load_config,
+):
+    """Empty recommendations → no orders placed, no crash."""
+    mock_load_config.return_value = ScreenerConfig()
+    mock_broker = MagicMock()
+    mock_broker.get_positions.return_value = []
+    mock_broker_cls.return_value = mock_broker
+    mock_strat_logger_cls.return_value = MagicMock()
+    mock_setup_logger.return_value = MagicMock()
+
+    result = runner.invoke(app, [])
+    assert result.exit_code == 0
+    mock_broker.market_sell.assert_not_called()
+
+
+def test_no_core_execution_imports():
+    """scripts/run_strategy.py must not import from core.execution."""
+    import ast
+    from pathlib import Path
+
+    source = Path("scripts/run_strategy.py").read_text()
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            assert node.module != "core.execution", (
+                "run_strategy.py still imports from core.execution"
+            )
