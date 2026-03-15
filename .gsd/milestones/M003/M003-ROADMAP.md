@@ -59,7 +59,7 @@ This milestone is complete only when all are true:
 - [x] **S02: Put Screener CLI + Strategy Integration** `risk:medium` `depends:[S01]`
   > After this: User runs `run-put-screener AAPL MSFT GOOG --buying-power 50000` and sees a Rich table of put recommendations. Running `run-strategy` uses `screen_puts()` for the put-selling leg instead of the legacy `sell_puts()` path. Verified by CLI tests and strategy integration tests.
 
-- [ ] **S03: Legacy Code Removal + Docs Update** `risk:low` `depends:[S02]`
+- [x] **S03: Legacy Code Removal + Docs Update** `risk:low` `depends:[S02]`
   > After this: `core/strategy.py`, the `sell_puts()` and `sell_calls()` functions in `core/execution.py`, `models/contract.py`, and obsolete constants in `config/params.py` are deleted. `core/execution.py` is either empty (deleted) or contains only non-dead code. `CLAUDE.md` and `README.md` reflect the new architecture. All 368+ existing tests still pass.
 
 - [ ] **S04: End-to-End Strategy Verification** `risk:low` `depends:[S03]`

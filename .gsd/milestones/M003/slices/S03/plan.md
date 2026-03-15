@@ -23,14 +23,14 @@
 
 ## Tasks
 
-- [ ] **T01: Delete legacy modules and clean config/params.py** `est:30m`
+- [x] **T01: Delete legacy modules and clean config/params.py** `est:30m`
   - Why: These modules are dead code — all functionality replaced by screener modules
   - Files: `core/strategy.py` (delete), `core/execution.py` (delete), `models/contract.py` (delete), `config/params.py` (edit)
   - Do: Delete `core/strategy.py`. Delete `core/execution.py`. Delete `models/contract.py`. Edit `config/params.py` to remove `YIELD_MIN`, `YIELD_MAX`, `SCORE_MIN`, `OPEN_INTEREST_MIN`, `EXPIRATION_MIN`, `EXPIRATION_MAX`. Keep only `MAX_RISK`, `DELTA_MIN`, `DELTA_MAX`. Search for any remaining imports of deleted modules (`rg "from core.strategy|from core.execution|from models.contract"`) and fix them. Remove `import numpy as np` from `core/execution.py` consumers if applicable. Fix `core/broker_client.py` if it imports from `config/params.py` for `EXPIRATION_MIN`/`EXPIRATION_MAX` — replace with local constants or pass as parameters. Remove any test files that exclusively test deleted modules.
   - Verify: `python -m pytest tests/ -q` — all tests pass; `rg "from core.strategy|from core.execution|from models.contract" .` — zero matches
   - Done when: All deleted modules are gone, no import errors, all tests pass
 
-- [ ] **T02: Update CLAUDE.md and README.md** `est:20m`
+- [x] **T02: Update CLAUDE.md and README.md** `est:20m`
   - Why: Documentation must reflect the new architecture so future sessions don't reference deleted modules
   - Files: `CLAUDE.md`, `README.md`
   - Do: Update CLAUDE.md Architecture section: remove `core/strategy.py` and `core/execution.py` descriptions, add `screener/put_screener.py` description, update `models/contract.py` to note it's removed, update `config/params.py` description to list only remaining constants. Update README.md: add `run-put-screener` CLI usage example, update architecture description. Verify `CLAUDE.md` `Key Modules` section is accurate.
