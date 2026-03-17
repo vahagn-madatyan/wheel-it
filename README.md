@@ -120,8 +120,8 @@ Find your install path with `which wheelit`.
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/vahagn-madatyan/wheeely.git
-   cd wheeely
+   git clone https://github.com/vahagn-madatyan/wheel-it.git
+   cd wheel-it
    ```
 
 2. **Create a virtual environment using [`uv`](https://github.com/astral-sh/uv):**
