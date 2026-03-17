@@ -67,7 +67,7 @@
   - Verify: `source .venv/bin/activate && pip install "python-jose[cryptography]>=3.3.0" && python -m pytest apps/api/tests/test_auth.py -v`
   - Done when: Auth tests pass. `get_current_user` correctly validates/rejects JWTs. Key management Pydantic schemas exist in schemas.py.
 
-- [ ] **T04: Build key management endpoints, wire into main.py, verify full suite** `est:1h`
+- [x] **T04: Build key management endpoints, wire into main.py, verify full suite** `est:1h`
   - Why: This integrates encryption + auth + DB into the key CRUD endpoints that S04 consumes. Wiring into main.py makes the endpoints live. Final verification confirms nothing is broken.
   - Files: `apps/api/routers/keys.py`, `apps/api/tests/test_keys_endpoints.py`, `apps/api/main.py`, `apps/api/tests/conftest.py`
   - Do: Create `keys.py` router with prefix `/api/keys`. Implement 4 endpoints: (1) `POST /{provider}` — accepts `KeyStoreRequest`, encrypts key_value via encryption service, stores in DB (mocked in tests), provider must be "alpaca" or "finnhub", key_name derived from provider ("api_key"/"secret_key" for alpaca, "finnhub_key" for finnhub); (2) `GET /status` — returns list of `KeyStatusResponse` for all providers user has keys stored for; (3) `DELETE /{provider}` — removes all keys for provider+user; (4) `POST /{provider}/verify` — decrypts stored keys, makes lightweight API call (Alpaca `get_account()` or Finnhub company profile), returns `KeyVerifyResponse`. All endpoints use `Depends(get_current_user)` for auth. Wire `keys.router` into `main.py`. Add auth helper fixtures to `conftest.py` (mock `get_current_user` override). Write endpoint tests with mocked DB and encryption. Run full test suite: 425 CLI + all API tests pass.

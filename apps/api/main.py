@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.services.task_store import TaskStore, periodic_cleanup
-from apps.api.routers import screen, positions
+from apps.api.routers import keys, screen, positions
 
 
 @asynccontextmanager
@@ -49,3 +49,4 @@ app.add_middleware(
 
 app.include_router(screen.router)
 app.include_router(positions.router)
+app.include_router(keys.router)

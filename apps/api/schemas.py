@@ -164,6 +164,10 @@ class KeyStoreRequest(BaseModel):
     """Request body for storing an API key (plaintext — encrypted at rest)."""
 
     key_value: str = Field(..., description="Plaintext API key value to store")
+    key_name: str = Field(
+        ...,
+        description="Key identifier: 'api_key' or 'secret_key' (alpaca), 'api_key' (finnhub)",
+    )
     is_paper: Optional[bool] = Field(
         None, description="Paper trading flag (only used for alpaca provider)"
     )
