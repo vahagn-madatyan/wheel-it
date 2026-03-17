@@ -96,6 +96,14 @@ Build the complete auth flow: Next.js middleware that refreshes Supabase session
 - Login form shows error on invalid credentials
 - Signup form shows "check email" message on success
 
+## Observability Impact
+
+- **Middleware redirects:** Unauthenticated requests to `/dashboard`, `/screener/*`, `/settings` produce 307 redirects visible in the browser Network tab and the Next.js server terminal.
+- **Auth callback errors:** Failed `exchangeCodeForSession()` calls redirect to `/login?error=auth` — the `error` query param is the observable failure signal.
+- **Login/signup errors:** Client-side error state renders a red alert with the Supabase error message — visible in the DOM and via browser accessibility tree.
+- **Cookie flow:** Middleware writes Supabase auth cookies on every request. Inspect via browser DevTools → Application → Cookies to verify session refresh is happening.
+- **Missing env vars:** If `NEXT_PUBLIC_SUPABASE_URL` or `NEXT_PUBLIC_SUPABASE_ANON_KEY` is unset, the Supabase client constructor throws at runtime — visible as a console error and a white-screen crash.
+
 ## Inputs
 
 - `apps/web/src/lib/supabase/client.ts` — browser client from T01
