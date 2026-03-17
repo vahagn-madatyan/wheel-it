@@ -65,6 +65,12 @@ The API code lives entirely under `apps/api/` and does not modify any CLI files.
 - `python -c "from apps.api.main import app; print(app.title)"` prints `Wheeely Screening API`
 - `cat apps/api/requirements.txt` shows 5 dependency lines
 
+## Observability Impact
+
+- **What changes:** The `apps/api/` directory gains 16 Python source files that weren't previously on the working branch. No runtime behavior changes since the API server isn't started — this is a file-checkout + dependency-install task.
+- **How to inspect:** `find apps/api -name '*.py' -not -path '*__pycache__*' | wc -l` confirms file count; `uv pip list | grep -i fastapi` confirms dependency installation.
+- **Failure visibility:** If checkout fails, `find` returns <16 files. If dependency install fails, the smoke-test import will raise `ModuleNotFoundError` for `fastapi` or `httpx`.
+
 ## Inputs
 
 - `gsd/M004/S01` branch — contains the complete `apps/api/` source tree with all 16 Python files

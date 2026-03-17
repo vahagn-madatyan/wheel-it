@@ -27,6 +27,7 @@
 - `python -m pytest tests/ -q` — 425 CLI tests pass (CLI-COMPAT-01)
 - `python -m pytest apps/api/tests/ -v` — 31+ API tests pass (WEB-11 + all endpoint contracts)
 - `python -c "from apps.api.main import app; print(app.title)"` — import smoke test
+- `python -m pytest apps/api/tests/ -v -k "invalid or error or 404 or 400 or 502"` — failure-path tests pass (unknown run_id → 404, invalid preset → 400, Alpaca API errors → 502)
 
 ## Observability / Diagnostics
 
@@ -43,7 +44,7 @@
 
 ## Tasks
 
-- [ ] **T01: Bring S01 API code from branch to main and install dependencies** `est:20m`
+- [x] **T01: Bring S01 API code from branch to main and install dependencies** `est:20m`
   - Why: All S01 source code exists only on the `gsd/M004/S01` branch. Main has only `__pycache__` in `apps/`. Must checkout the 16 source files and install API-specific dependencies before tests can run.
   - Files: `apps/api/main.py`, `apps/api/schemas.py`, `apps/api/services/clients.py`, `apps/api/services/task_store.py`, `apps/api/routers/screen.py`, `apps/api/routers/positions.py`, `apps/api/requirements.txt`, `apps/api/tests/conftest.py`, `apps/api/tests/test_*.py`, `apps/api/__init__.py`, `apps/api/routers/__init__.py`, `apps/api/services/__init__.py`, `apps/api/tests/__init__.py`
   - Do: (1) `git checkout gsd/M004/S01 -- apps/` to bring all source files from the branch. (2) `uv pip install -r apps/api/requirements.txt` to install FastAPI, uvicorn, httpx, pytest-asyncio. (3) Verify all 16 files exist and `python -c "from apps.api.main import app; print(app.title)"` succeeds.
