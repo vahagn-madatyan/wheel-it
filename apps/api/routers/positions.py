@@ -7,7 +7,7 @@ These are fast enough for inline execution via asyncio.to_thread()
 import asyncio
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 
 from apps.api.schemas import (
     AccountResponse,
@@ -15,7 +15,10 @@ from apps.api.schemas import (
     PositionsResponse,
     WheelStateEntry,
 )
+from apps.api.services.auth import get_current_user
 from apps.api.services.clients import create_alpaca_clients
+from apps.api.services.database import get_db
+from apps.api.services.key_retrieval import retrieve_alpaca_keys
 
 from core.state_manager import calculate_risk, update_state
 
@@ -31,19 +34,19 @@ router = APIRouter(prefix="/api", tags=["positions"])
 
 @router.get("/positions", response_model=PositionsResponse)
 async def get_positions(
-    alpaca_api_key: str = Query(..., description="Alpaca API key"),
-    alpaca_secret_key: str = Query(..., description="Alpaca secret key"),
-    is_paper: bool = Query(True, description="Use paper trading environment"),
+    user_id: str = Depends(get_current_user),
+    db=Depends(get_db),
 ):
     """Fetch current positions with wheel state classification.
 
-    Constructs a per-request TradingClient from the provided keys,
-    fetches all positions, and runs update_state() to classify each
-    underlying into short_put / long_shares / short_call.
+    Uses JWT auth to identify the user, retrieves encrypted Alpaca keys
+    from the DB, and fetches positions via the Alpaca API.
     """
+    api_key, secret_key, is_paper = await retrieve_alpaca_keys(user_id, db)
+
     trade_client, _, _ = create_alpaca_clients(
-        api_key=alpaca_api_key,
-        secret_key=alpaca_secret_key,
+        api_key=api_key,
+        secret_key=secret_key,
         is_paper=is_paper,
     )
 
@@ -88,18 +91,19 @@ async def get_positions(
 
 @router.get("/account", response_model=AccountResponse)
 async def get_account(
-    alpaca_api_key: str = Query(..., description="Alpaca API key"),
-    alpaca_secret_key: str = Query(..., description="Alpaca secret key"),
-    is_paper: bool = Query(True, description="Use paper trading environment"),
+    user_id: str = Depends(get_current_user),
+    db=Depends(get_db),
 ):
     """Fetch account summary with capital at risk.
 
     Returns buying power, portfolio value, cash, and total capital at risk
     computed from current positions.
     """
+    api_key, secret_key, is_paper = await retrieve_alpaca_keys(user_id, db)
+
     trade_client, _, _ = create_alpaca_clients(
-        api_key=alpaca_api_key,
-        secret_key=alpaca_secret_key,
+        api_key=api_key,
+        secret_key=secret_key,
         is_paper=is_paper,
     )
 

@@ -46,7 +46,7 @@
 
 ## Tasks
 
-- [ ] **T01: Switch screen + positions endpoints to auth + DB-stored keys** `est:45m`
+- [x] **T01: Switch screen + positions endpoints to auth + DB-stored keys** `est:45m`
   - Why: Frontend doesn't have raw API keys — they're encrypted in the DB. Without this change, the screener pages have no way to call the API. This is the riskier piece since it modifies working endpoints and 19 existing tests.
   - Files: `apps/api/services/key_retrieval.py`, `apps/api/routers/screen.py`, `apps/api/routers/positions.py`, `apps/api/schemas.py`, `apps/api/tests/test_screen_endpoints.py`, `apps/api/tests/test_positions_account.py`
   - Do: Create `retrieve_alpaca_keys(user_id, db)` helper in `services/key_retrieval.py` that fetches rows from `api_keys`, decrypts via `decrypt_value()`, validates both `api_key` and `secret_key` exist, and returns `(api_key, secret_key, is_paper)`. Update `screen.py` to replace `AlpacaKeysMixin` body fields with `Depends(get_current_user)` + `Depends(get_db)` + `retrieve_alpaca_keys()`. Same for `positions.py`. Update schemas: `PutScreenRequest` and `CallScreenRequest` drop `AlpacaKeysMixin` inheritance (keep only screening params). Remove `PositionsQuery` and `AccountQuery` (no longer needed). Add auth to poll endpoint. Update all 19 tests to use `mock_auth` + `mock_db` fixtures and mock `retrieve_alpaca_keys`. Add tests for missing-keys and auth-required error paths.

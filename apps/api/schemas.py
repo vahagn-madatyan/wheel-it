@@ -10,24 +10,11 @@ from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------------------
-# Shared mixin for Alpaca credentials
-# ---------------------------------------------------------------------------
-
-
-class AlpacaKeysMixin(BaseModel):
-    """Base model carrying Alpaca API credentials per request."""
-
-    alpaca_api_key: str = Field(..., description="Alpaca API key")
-    alpaca_secret_key: str = Field(..., description="Alpaca secret key")
-    is_paper: bool = Field(True, description="Use paper trading environment")
-
-
-# ---------------------------------------------------------------------------
 # Screening request models
 # ---------------------------------------------------------------------------
 
 
-class PutScreenRequest(AlpacaKeysMixin):
+class PutScreenRequest(BaseModel):
     """Request body for submitting a put screening run."""
 
     symbols: list[str] = Field(..., min_length=1, description="Underlying tickers to screen")
@@ -35,7 +22,7 @@ class PutScreenRequest(AlpacaKeysMixin):
     preset: str = Field("moderate", description="Screener preset: conservative, moderate, aggressive")
 
 
-class CallScreenRequest(AlpacaKeysMixin):
+class CallScreenRequest(BaseModel):
     """Request body for submitting a call screening run."""
 
     symbol: str = Field(..., description="Underlying ticker for covered calls")
@@ -100,24 +87,8 @@ class RunStatusResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Positions / Account query params and responses
+# Positions / Account response schemas
 # ---------------------------------------------------------------------------
-
-
-class PositionsQuery(BaseModel):
-    """Query parameters for the positions endpoint."""
-
-    alpaca_api_key: str
-    alpaca_secret_key: str
-    is_paper: bool = True
-
-
-class AccountQuery(BaseModel):
-    """Query parameters for the account endpoint."""
-
-    alpaca_api_key: str
-    alpaca_secret_key: str
-    is_paper: bool = True
 
 
 class PositionSchema(BaseModel):

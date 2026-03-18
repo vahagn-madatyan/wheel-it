@@ -8,7 +8,7 @@ import asyncio
 import logging
 
 from dataclasses import asdict
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from apps.api.schemas import (
     CallScreenRequest,
@@ -18,7 +18,10 @@ from apps.api.schemas import (
     PutResultSchema,
     CallResultSchema,
 )
+from apps.api.services.auth import get_current_user
 from apps.api.services.clients import create_alpaca_clients
+from apps.api.services.database import get_db
+from apps.api.services.key_retrieval import retrieve_alpaca_keys
 from apps.api.services.task_store import TaskStatus
 
 from screener.config_loader import ScreenerConfig, load_preset
@@ -41,7 +44,12 @@ def _get_task_store(request: Request):
 
 
 @router.post("/puts", response_model=RunSubmitResponse, status_code=202)
-async def submit_put_screen(body: PutScreenRequest, request: Request):
+async def submit_put_screen(
+    body: PutScreenRequest,
+    request: Request,
+    user_id: str = Depends(get_current_user),
+    db=Depends(get_db),
+):
     """Submit a put screening run.
 
     Returns 202 immediately with a run_id. Poll GET /api/screen/runs/{run_id}
@@ -56,11 +64,14 @@ async def submit_put_screen(body: PutScreenRequest, request: Request):
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
+    # Retrieve keys from DB
+    api_key, secret_key, is_paper = await retrieve_alpaca_keys(user_id, db)
+
     # Create per-request Alpaca clients
     trade_client, option_client, stock_client = create_alpaca_clients(
-        api_key=body.alpaca_api_key,
-        secret_key=body.alpaca_secret_key,
-        is_paper=body.is_paper,
+        api_key=api_key,
+        secret_key=secret_key,
+        is_paper=is_paper,
     )
 
     run_id = store.submit("put_screen")
@@ -102,7 +113,12 @@ async def _run_put_screen(
 
 
 @router.post("/calls", response_model=RunSubmitResponse, status_code=202)
-async def submit_call_screen(body: CallScreenRequest, request: Request):
+async def submit_call_screen(
+    body: CallScreenRequest,
+    request: Request,
+    user_id: str = Depends(get_current_user),
+    db=Depends(get_db),
+):
     """Submit a call screening run.
 
     Returns 202 immediately with a run_id. Poll GET /api/screen/runs/{run_id}
@@ -116,10 +132,12 @@ async def submit_call_screen(body: CallScreenRequest, request: Request):
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
+    api_key, secret_key, is_paper = await retrieve_alpaca_keys(user_id, db)
+
     trade_client, option_client, _ = create_alpaca_clients(
-        api_key=body.alpaca_api_key,
-        secret_key=body.alpaca_secret_key,
-        is_paper=body.is_paper,
+        api_key=api_key,
+        secret_key=secret_key,
+        is_paper=is_paper,
     )
 
     run_id = store.submit("call_screen")
@@ -159,7 +177,11 @@ async def _run_call_screen(
 
 
 @router.get("/runs/{run_id}", response_model=RunStatusResponse)
-async def get_run_status(run_id: str, request: Request):
+async def get_run_status(
+    run_id: str,
+    request: Request,
+    user_id: str = Depends(get_current_user),
+):
     """Poll status and results of a screening run.
 
     Returns 404 if run_id is unknown.
