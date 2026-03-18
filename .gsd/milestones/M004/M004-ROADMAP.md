@@ -67,7 +67,7 @@ This milestone is complete only when all are true:
 - [x] **S03: Next.js shell + auth flow** `risk:medium` `depends:[S02]`
   > After this: User visits the app in a browser, signs up with email, logs in, sees an authenticated app shell with sidebar nav (Dashboard, Put Screener, Call Screener, Settings). Logout works. Unauthenticated users are redirected to login. Verified in browser against running dev server.
 
-- [ ] **S04: BYOK key management UI** `risk:medium` `depends:[S02, S03]`
+- [x] **S04: BYOK key management UI** `risk:medium` `depends:[S02, S03]`
   > After this: User navigates to Settings, enters Alpaca key+secret with paper/live toggle and Finnhub key. Keys are stored encrypted via the API. Connection status shows green/red badges after verification. User can delete keys. Verified in browser with real key storage and connectivity check.
 
 - [ ] **S05: Screener UI** `risk:medium` `depends:[S01, S04]`
