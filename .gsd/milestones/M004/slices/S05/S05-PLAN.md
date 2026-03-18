@@ -53,7 +53,7 @@
   - Verify: `python -m pytest apps/api/tests/ -v` (all pass) && `python -m pytest tests/ -q` (425 pass)
   - Done when: All API tests pass with auth-aware endpoints. No test references `ALPACA_KEYS` in request bodies or `ALPACA_QUERY_PARAMS` in query params for screen/positions endpoints.
 
-- [ ] **T02: Build Put Screener page with shared results table component** `est:40m`
+- [x] **T02: Build Put Screener page with shared results table component** `est:40m`
   - Why: Delivers WEB-05 — core free-tier value. Establishes the screener page pattern and shared results table component that T03 reuses.
   - Files: `apps/web/src/app/(app)/screener/puts/page.tsx`, `apps/web/src/components/screener-results-table.tsx`
   - Do: Create shared `ScreenerResultsTable` component: accepts column definitions + data array, renders sortable HTML table with Tailwind styling, handles sort-by-column-click with ascending/descending toggle. Build Put Screener page as `'use client'` component: fetch `GET /api/keys/status` on mount — if Alpaca not connected, show message with link to `/settings`; if connected, show form with preset `<select>` (conservative/moderate/aggressive), symbols `<textarea>`, buying power `<input type="number">`. On submit, `POST /api/screen/puts` via `apiFetch()`, get `run_id`, start `setInterval` polling `GET /api/screen/runs/{run_id}` every 2s. Show progress indicator while polling. On completed, render results via `ScreenerResultsTable`. On failed, show error. Clean up interval on unmount and completion via `useEffect` cleanup.

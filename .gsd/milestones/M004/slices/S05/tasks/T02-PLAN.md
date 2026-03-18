@@ -88,6 +88,14 @@ All API calls use `apiFetch()` from `@/lib/api-client` (established in S03/S04).
 - T01 output — backend now expects `POST /api/screen/puts` with body `{ symbols: string[], buying_power: number, preset: string }` (no key fields) + `Authorization: Bearer <jwt>` header. Returns `{ run_id: string, status: "pending" }`. Poll at `GET /api/screen/runs/{run_id}` returns `{ run_id, status, run_type, results, error }`.
 - `apps/api/schemas.py` — `PutResultSchema` defines result fields: symbol, underlying, strike, dte, premium, delta (nullable), oi, spread, annualized_return
 
+## Observability Impact
+
+- **Key status gate:** Page fetches `GET /api/keys/status` on mount. If Alpaca provider not connected, the form is hidden and a "connect keys" card renders — visible in the DOM as a link to `/settings`. Future agents can verify connectivity gate via `browser_find text="Connect your Alpaca API keys"`.
+- **Polling lifecycle:** Active polling is visible via the "Screening in progress…" text and spinner. Completion replaces spinner with results table. Failure renders a `role="alert"` div with error text. Network logs show `GET /api/screen/runs/{run_id}` requests at 2s intervals.
+- **Results table state:** Column sort state is reflected by `▲`/`▼` indicators in header cells. Empty results show "No results found" text.
+- **Error surfaces:** All API errors (key status, submit, poll) render in `role="alert"` divs with descriptive messages. No silent failures.
+- **Cleanup:** Polling interval clears on unmount (useEffect return) and on terminal status (completed/failed). No memory leaks observable in browser devtools.
+
 ## Expected Output
 
 - `apps/web/src/components/screener-results-table.tsx` — new shared component (~100-130 lines), exports `ScreenerResultsTable` and `ColumnDef`
