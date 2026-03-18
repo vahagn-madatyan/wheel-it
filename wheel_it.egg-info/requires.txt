@@ -1,0 +1,12 @@
+python-dotenv
+pandas>=1.5
+numpy>=1.23
+pytz
+requests>=2.28
+alpaca-py
+finnhub-python
+rich>=14.0
+typer>=0.9.0
+ta>=0.11
+pyyaml>=6.0
+pydantic>=2.0

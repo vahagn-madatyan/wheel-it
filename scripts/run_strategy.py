@@ -11,7 +11,7 @@ Usage:
 import logging as stdlib_logging
 from enum import Enum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 
 import typer
 from pydantic import ValidationError
@@ -74,6 +74,10 @@ def run(
         bool,
         typer.Option("--screen", help="Run screener before strategy, update symbol list"),
     ] = False,
+    top_n: Annotated[
+        Optional[int],
+        typer.Option("--top-n", help="Cap the number of stocks processed after Stage 1 (requires --screen)", min=1),
+    ] = None,
 ) -> None:
     """Run the options wheel trading strategy."""
     # Initialize loggers
@@ -81,6 +85,9 @@ def run(
     std_logger = setup_logger(level=log_level.value, to_file=log_to_file)
 
     strat_logger.set_fresh_start(fresh_start)
+
+    if top_n is not None and not screen:
+        std_logger.warning("--top-n has no effect without --screen, ignoring.")
 
     # Create BrokerClient early so it can be reused for both --screen and strategy
     client = BrokerClient(api_key=ALPACA_API_KEY, secret_key=ALPACA_SECRET_KEY, paper=IS_PAPER)
@@ -114,6 +121,7 @@ def run(
                 finnhub,
                 cfg,
                 on_progress=on_progress,
+                top_n=top_n,
             )
 
         render_results_table(results)

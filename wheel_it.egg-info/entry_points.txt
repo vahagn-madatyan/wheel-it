@@ -1,0 +1,6 @@
+[console_scripts]
+run-call-screener = scripts.run_call_screener:main
+run-put-screener = scripts.run_put_screener:main
+run-screener = scripts.run_screener:main
+run-strategy = scripts.run_strategy:main
+wheelit = scripts.run_strategy:main

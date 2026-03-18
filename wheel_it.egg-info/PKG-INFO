@@ -1,0 +1,248 @@
+Metadata-Version: 2.4
+Name: wheel-it
+Version: 0.1.3
+Summary: An automated options wheel trading strategy.
+Author: Vahagn Madatyan
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: python-dotenv
+Requires-Dist: pandas>=1.5
+Requires-Dist: numpy>=1.23
+Requires-Dist: pytz
+Requires-Dist: requests>=2.28
+Requires-Dist: alpaca-py
+Requires-Dist: finnhub-python
+Requires-Dist: rich>=14.0
+Requires-Dist: typer>=0.9.0
+Requires-Dist: ta>=0.11
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: pydantic>=2.0
+Dynamic: license-file
+
+# wheel-it
+
+Automated [options wheel strategy](https://alpaca.markets/learn/options-wheel-strategy) bot. Sell cash-secured puts, handle assignments, sell covered calls, collect premiums — repeat.
+
+---
+
+## Install
+
+```bash
+pip install wheel-it
+```
+
+## Quick Start
+
+1. **Set up your API keys** — create a `.env` file (or export the variables):
+
+   ```env
+   ALPACA_API_KEY=your_public_key
+   ALPACA_SECRET_KEY=your_private_key
+   IS_PAPER=true
+   FINNHUB_API_KEY=your_finnhub_key
+   ```
+
+   Get Alpaca keys at [alpaca.markets](https://alpaca.markets/). Get a free Finnhub key at [finnhub.io/register](https://finnhub.io/register).
+
+2. **Choose your stocks** — edit `config/symbol_list.txt` with one ticker per line. Pick stocks you'd be comfortable holding long-term.
+
+3. **Run it:**
+
+   ```bash
+   wheelit
+   ```
+
+   That's it. The bot will check your positions, sell covered calls on any assigned stock, and sell new puts on your symbol list within your buying power.
+
+### CLI Options
+
+```bash
+wheelit --fresh-start       # liquidate all positions first (recommended for first run)
+wheelit --screen            # run stock screener before strategy
+wheelit --strat-log         # enable JSON strategy logging
+wheelit --log-level DEBUG   # set log verbosity
+wheelit --log-to-file       # save logs to file
+```
+
+---
+
+## Stock Screener
+
+Find wheel-suitable stocks using Finnhub fundamentals and Alpaca technicals:
+
+```bash
+run-screener                          # default (moderate) preset
+run-screener --preset conservative    # large-cap, low debt
+run-screener --preset aggressive      # small-cap OK
+run-screener --top-n 20               # only screen the top 20 worst performers
+run-screener --verbose                # show per-filter breakdown
+run-screener --update-symbols         # export results to symbol_list.txt
+```
+
+### Recommended Commands
+
+```bash
+# Best for free-tier API accounts (Alpaca + Finnhub)
+run-screener --preset moderate --top-n 15
+
+# Full scan if you have paid API access
+run-screener --preset moderate
+
+# Screen and auto-update your symbol list
+run-screener --preset moderate --top-n 20 --update-symbols
+```
+
+### Using `--top-n`
+
+The `--top-n N` flag limits screening to the N worst-performing stocks from the initial technical scan. This is important if you're on **free API tiers** — Finnhub and Alpaca free plans have strict rate limits, and screening hundreds of symbols will hit those limits quickly.
+
+How it works:
+1. Stage 1 fetches technicals for all candidates (cheap, single API call per symbol)
+2. Survivors are ranked by recent performance (worst performers first — these tend to have the juiciest put premiums)
+3. `--top-n` cuts the list to the top N before hitting the rate-limited Finnhub and options chain APIs in Stages 2-4
+
+This keeps API usage low while focusing on the most promising wheel candidates. Start with `--top-n 15` on free accounts and increase as your rate limits allow.
+
+### Presets
+
+| Category | Conservative | Moderate | Aggressive |
+|----------|-------------|----------|------------|
+| Market Cap Min | $10B | $2B | $500M |
+| Debt/Equity Max | 0.5 | 1.5 | 3.0 |
+| Avg Volume Min | 1M | 500K | 200K |
+| HV Percentile Min | 50 | 30 | 20 |
+| Earnings Exclusion | 21 days | 14 days | 7 days |
+| Options OI Min | 500 | 100 | 50 |
+| Options Spread Max | 5% | 10% | 20% |
+| Sector Exclusions | Biotech, Cannabis, O&G | Cannabis | None |
+
+Custom overrides go in `config/screener.yaml`. Preset files are in `config/presets/`.
+
+### Pipeline
+
+4-stage filtering in cheap-first order:
+
+1. **Technicals** (Alpaca) — price range, volume, RSI, SMA(200), HV percentile
+2. **Earnings** (Finnhub) — exclude stocks with upcoming earnings
+3. **Fundamentals** (Finnhub) — market cap, debt/equity, net margin, sales growth, sector
+4. **Options Chain** (Alpaca) — open interest, bid/ask spread on nearest ATM put
+
+Survivors are scored by wheel suitability (capital efficiency 45%, volatility 35%, fundamentals 20%).
+
+---
+
+## Put & Call Screeners
+
+Explore specific option opportunities:
+
+```bash
+run-put-screener AAPL MSFT GOOG --buying-power 50000
+run-put-screener AAPL --buying-power 20000 --preset conservative
+
+run-call-screener AAPL --cost-basis 175.00
+run-call-screener AAPL --cost-basis 175.00 --preset conservative
+```
+
+The call screener enforces **strike >= cost basis** so you never sell below your entry. Both rank by annualized return.
+
+---
+
+## Automating
+
+Run `wheelit` on a schedule to keep the wheel turning. Example cron (Mac/Linux) — runs at 10 AM, 1 PM, and 3:30 PM ET on weekdays:
+
+```cron
+0 10 * * 1-5 /path/to/wheelit >> /path/to/logs/10am.log 2>&1
+0 13 * * 1-5 /path/to/wheelit >> /path/to/logs/1pm.log 2>&1
+30 15 * * 1-5 /path/to/wheelit >> /path/to/logs/330pm.log 2>&1
+```
+
+Find your install path with `which wheelit`.
+
+---
+
+## Build from Source
+
+1. **Clone the repository:**
+
+   ```bash
+   git clone https://github.com/vahagn-madatyan/wheel-it.git
+   cd wheel-it
+   ```
+
+2. **Create a virtual environment using [`uv`](https://github.com/astral-sh/uv):**
+
+   ```bash
+   uv venv
+   source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+   ```
+
+3. **Install in editable mode:**
+
+   ```bash
+   uv pip install -e .
+   ```
+
+4. **Configure** `.env` and `config/symbol_list.txt` as described above.
+
+5. **Run tests:**
+
+   ```bash
+   python -m pytest tests/ -q
+   ```
+
+### Tuning
+
+- `config/params.py` — strategy constants (buying power limits, delta range, scoring thresholds)
+- `config/presets/` — screener preset YAML files
+- `config/screener.yaml` — custom screener overrides
+
+---
+
+## How It Works
+
+1. **Sell cash-secured puts** on stocks you wouldn't mind owning
+2. If **assigned**, buy the stock
+3. **Sell covered calls** on the shares you hold
+4. Collect premiums until the stock gets called away
+5. Repeat
+
+### Strategy Details
+
+- **Stock filtering** — only trades symbols where 100 shares fit within buying power
+- **Option filtering** — delta range, open interest, yield, bid/ask spread
+- **Scoring** — `(1 - |delta|) * (250 / (DTE + 5)) * (bid / strike)` — annualized return adjusted for assignment probability
+- **Diversification** — one contract per underlying symbol
+- **Call strike floor** — covered calls enforce strike >= cost basis
+
+---
+
+## Important Notes
+
+- This strategy assumes full control of the account. Start with a clean account or use `--fresh-start`.
+- One contract per symbol to simplify risk management.
+- Always double-check live trades — no system is completely hands-off.
+- Start with paper trading (`IS_PAPER=true`) before using real money.
+
+---
+
+## Attribution
+
+This project was inspired by and forked from Alpaca's [options-wheel](https://github.com/alpacahq/options-wheel) repository. Read their article on the wheel strategy: [Options Wheel Strategy — Alpaca Learn](https://alpaca.markets/learn/options-wheel-strategy).
+
+---
+
+<details>
+<summary>Disclosures</summary>
+
+Options trading is not suitable for all investors due to its inherent high risk, which can potentially result in significant losses. Please read [Characteristics and Risks of Standardized Options](https://www.theocc.com/company-information/documents-and-archives/options-disclosure-document) before investing in options.
+
+The Paper Trading API is offered by AlpacaDB, Inc. and does not require real money or permit a user to transact in real securities in the market. Providing use of the Paper Trading API is not an offer or solicitation to buy or sell securities, securities derivative or futures products of any kind, or any type of trading or investment advice, recommendation or strategy, given or in any manner endorsed by AlpacaDB, Inc. or any AlpacaDB, Inc. affiliate and the information made available through the Paper Trading API is not an offer or solicitation of any kind in any jurisdiction where AlpacaDB, Inc. or any AlpacaDB, Inc. affiliate (collectively, "Alpaca") is not authorized to do business.
+
+All investments involve risk, and the past performance of a security, or financial product does not guarantee future results or returns. There is no guarantee that any investment strategy will achieve its objectives. Please note that diversification does not ensure a profit, or protect against loss. There is always the potential of losing money when you invest in securities, or other financial products. Investors should consider their investment objectives and risks carefully before investing.
+
+Securities brokerage services are provided by Alpaca Securities LLC ("Alpaca Securities"), member [FINRA](https://www.finra.org/)/[SIPC](https://www.sipc.org/), a wholly-owned subsidiary of AlpacaDB, Inc. Technology and services are offered by AlpacaDB, Inc.
+
+This is not an offer, solicitation of an offer, or advice to buy or sell securities or open a brokerage account in any jurisdiction where Alpaca Securities is not registered or licensed, as applicable.
+</details>
