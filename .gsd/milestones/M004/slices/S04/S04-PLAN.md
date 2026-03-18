@@ -52,7 +52,7 @@
   - Verify: Component renders with two provider cards, forms have correct inputs, handlers make correct API calls (verifiable by code review)
   - Done when: `settings/page.tsx` contains complete key management UI with status fetch, store, verify, and delete flows for both providers
 
-- [ ] **T02: Build verification and optional component extraction** `est:15m`
+- [x] **T02: Build verification and optional component extraction** `est:15m`
   - Why: Quality gate — confirms the Settings page compiles without type errors, the build produces the route, and CLI tests still pass. Extracts components if the file is too long.
   - Files: `apps/web/src/app/(app)/settings/page.tsx`, potentially `apps/web/src/components/provider-card.tsx`
   - Do: Run `cd apps/web && npm run build` — fix any TypeScript errors. Run `python -m pytest tests/ -q` — confirm 425 tests pass. If `settings/page.tsx` exceeds 250 lines, extract a `ProviderCard` component to `components/provider-card.tsx`. Verify Settings route appears in build output.

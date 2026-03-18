@@ -43,6 +43,13 @@ Quality gate task — confirms the Settings page from T01 compiles without TypeS
 - `python -m pytest tests/ -q` prints "425 passed"
 - If extracted: `apps/web/src/components/provider-card.tsx` exists and build still passes
 
+## Observability Impact
+
+- **Build output:** `npm run build` route list confirms `/settings` is compiled and included — absence indicates a TypeScript or import error
+- **ProviderCard extraction (if done):** Verify the component exists at `apps/web/src/components/provider-card.tsx` and the build still passes after the refactor
+- **CLI regression:** `python -m pytest tests/ -q` result count unchanged at 425 — any delta indicates accidental modification of CLI files
+- **Inspection:** After extraction, `settings/page.tsx` should be <150 lines of state + two `<ProviderCard>` renders; `provider-card.tsx` should contain all card rendering logic
+
 ## Inputs
 
 - `apps/web/src/app/(app)/settings/page.tsx` — complete Settings page from T01
