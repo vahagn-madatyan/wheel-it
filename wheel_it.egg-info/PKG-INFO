@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: wheel-it
-Version: 0.1.3
+Version: 0.2.0
 Summary: An automated options wheel trading strategy.
 Author: Vahagn Madatyan
 Requires-Python: >=3.8

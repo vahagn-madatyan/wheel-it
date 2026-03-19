@@ -13,6 +13,7 @@ apps/api/services/auth.py
 apps/api/services/clients.py
 apps/api/services/database.py
 apps/api/services/encryption.py
+apps/api/services/key_retrieval.py
 apps/api/services/task_store.py
 apps/api/tests/__init__.py
 apps/api/tests/conftest.py
