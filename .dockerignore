@@ -1,0 +1,42 @@
+# Version control
+.git
+.gitignore
+
+# GSD artifacts
+.gsd
+
+# Environment files
+.env
+.env.*
+
+# Python virtual environments
+.venv
+venv
+
+# Python bytecode
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+
+# Node.js
+node_modules
+.next
+
+# IDE / editor
+.vscode
+.idea
+.DS_Store
+
+# Project artifacts
+archive
+logs
+figures
+
+# Tests (not needed in production images)
+tests/
+apps/api/tests/
+
+# Documentation
+*.md
+!README.md

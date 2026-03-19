@@ -1,0 +1,49 @@
+# ---- Builder stage ----
+FROM python:3.12-slim AS builder
+
+WORKDIR /app
+
+# Install build dependencies for compiled wheels (cryptography, etc.)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc libffi-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy dependency manifests first for layer caching
+COPY pyproject.toml ./
+COPY apps/api/requirements.txt apps/api/requirements.txt
+
+# Install root project deps (alpaca-py, finnhub-python, etc.)
+RUN pip install --no-cache-dir .
+
+# Install API-specific deps (fastapi, uvicorn, gunicorn, etc.)
+RUN pip install --no-cache-dir -r apps/api/requirements.txt
+
+# Copy application source
+COPY screener/ screener/
+COPY core/ core/
+COPY config/ config/
+COPY apps/ apps/
+COPY premium/ premium/
+COPY scripts/ scripts/
+COPY logging/ logging/
+
+# ---- Runtime stage ----
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Copy installed packages from builder
+COPY --from=builder /usr/local/lib/python3.12/site-packages/ /usr/local/lib/python3.12/site-packages/
+COPY --from=builder /usr/local/bin/ /usr/local/bin/
+
+# Copy application source from builder
+COPY --from=builder /app/ /app/
+
+ENV PYTHONPATH=/app
+EXPOSE 8000
+
+CMD ["gunicorn", "apps.api.main:app", \
+     "--bind", "0.0.0.0:8000", \
+     "--workers", "2", \
+     "--worker-class", "uvicorn.workers.UvicornWorker", \
+     "--timeout", "120"]

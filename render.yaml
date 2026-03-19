@@ -1,0 +1,45 @@
+services:
+  - type: web
+    name: wheeely-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile.api
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: APP_ENCRYPTION_SECRET
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: PYTHONPATH
+        value: /app
+      - key: REDIS_URL
+        fromService:
+          name: wheeely-redis
+          type: redis
+          property: connectionString
+
+  - type: web
+    name: wheeely-web
+    runtime: docker
+    dockerfilePath: ./apps/web/Dockerfile
+    dockerContext: ./apps/web
+    envVars:
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: API_URL
+        fromService:
+          name: wheeely-api
+          type: web
+          property: hostport
+
+  - type: redis
+    name: wheeely-redis
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
