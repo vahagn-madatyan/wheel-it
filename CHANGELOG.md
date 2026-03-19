@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2026-03-18
+
+### Added
+
+- **`--max-risk` flag on `run-strategy`** — sets the maximum dollar risk (total capital budget) for the strategy. Overrides the config value. Usage: `run-strategy --max-risk 100000`.
+- **`max_risk` in screener config** — configurable via `config/screener.yaml` or preset profiles. Presets: conservative ($50k), moderate ($80k), aggressive ($120k). Precedence: CLI flag > screener.yaml > preset default.
+
 ## [0.2.0] - 2026-03-17
 
 ### Fixed

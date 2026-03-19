@@ -38,6 +38,7 @@ pip install wheel-it
 ```bash
 wheelit --fresh-start       # liquidate all positions first (recommended for first run)
 wheelit --screen            # run stock screener before strategy
+wheelit --max-risk 100000   # set total capital budget (default: from config/preset)
 wheelit --strat-log         # enable JSON strategy logging
 wheelit --log-level DEBUG   # set log verbosity
 wheelit --log-to-file       # save logs to file
@@ -86,6 +87,7 @@ This keeps API usage low while focusing on the most promising wheel candidates. 
 
 | Category | Conservative | Moderate | Aggressive |
 |----------|-------------|----------|------------|
+| Max Risk | $50K | $80K | $120K |
 | Market Cap Min | $10B | $2B | $500M |
 | Debt/Equity Max | 0.5 | 1.5 | 3.0 |
 | Avg Volume Min | 1M | 500K | 200K |

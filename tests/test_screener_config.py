@@ -87,6 +87,17 @@ class TestPresetLoading:
         assert conservative["technicals"]["above_sma200"] is True
         assert aggressive["technicals"]["above_sma200"] is False
 
+    def test_all_presets_have_differentiated_max_risk(self):
+        """Presets should have differentiated max_risk values."""
+        conservative = self._load_preset("conservative")
+        moderate = self._load_preset("moderate")
+        aggressive = self._load_preset("aggressive")
+
+        assert conservative["max_risk"] == 50000
+        assert moderate["max_risk"] == 80000
+        assert aggressive["max_risk"] == 120000
+        assert conservative["max_risk"] < moderate["max_risk"] < aggressive["max_risk"]
+
 
 # ---------------------------------------------------------------------------
 # ScreenedStock model tests (Task 1)
@@ -305,6 +316,34 @@ class TestLoadConfig:
         config_file.write_text("preset: yolo\n")
         with pytest.raises(ValidationError, match="conservative.*moderate.*aggressive|preset"):
             load_config(str(config_file))
+
+
+class TestMaxRiskConfig:
+    """Verify max_risk field on ScreenerConfig."""
+
+    def test_default_max_risk(self):
+        config = ScreenerConfig()
+        assert config.max_risk == 80_000
+
+    def test_max_risk_from_yaml(self, tmp_path):
+        config_file = tmp_path / "screener.yaml"
+        config_file.write_text("preset: moderate\nmax_risk: 100000\n")
+        config = load_config(str(config_file))
+        assert config.max_risk == 100_000
+
+    def test_max_risk_yaml_overrides_preset(self, tmp_path):
+        config_file = tmp_path / "screener.yaml"
+        config_file.write_text("preset: conservative\nmax_risk: 75000\n")
+        config = load_config(str(config_file))
+        assert config.max_risk == 75_000
+
+    def test_max_risk_validation_zero(self):
+        with pytest.raises(ValidationError):
+            ScreenerConfig(max_risk=0)
+
+    def test_max_risk_validation_negative(self):
+        with pytest.raises(ValidationError):
+            ScreenerConfig(max_risk=-1)
 
 
 class TestFormatValidationErrors:

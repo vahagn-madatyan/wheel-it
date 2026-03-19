@@ -1,4 +1,5 @@
 preset: moderate
+max_risk: 80000
 fundamentals:
   market_cap_min: 2000000000
   debt_equity_max: 1.5

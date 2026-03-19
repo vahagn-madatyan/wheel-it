@@ -20,13 +20,12 @@ from rich.panel import Panel
 
 from config.credentials import ALPACA_API_KEY, ALPACA_SECRET_KEY, IS_PAPER
 from config.credentials import require_finnhub_key
-from config.params import MAX_RISK
 from core.broker_client import BrokerClient
 from core.state_manager import update_state, calculate_risk
 from logging.logger_setup import setup_logger
 from logging.strategy_logger import StrategyLogger
 from screener.call_screener import screen_calls
-from screener.config_loader import format_validation_errors, load_config
+from screener.config_loader import ScreenerConfig, format_validation_errors, load_config
 from screener.display import (
     progress_context,
     render_results_table,
@@ -77,6 +76,10 @@ def run(
     top_n: Annotated[
         Optional[int],
         typer.Option("--top-n", help="Cap the number of stocks processed after Stage 1 (requires --screen)", min=1),
+    ] = None,
+    max_risk: Annotated[
+        Optional[int],
+        typer.Option("--max-risk", help="Maximum dollar risk (overrides config)", min=1),
     ] = None,
 ) -> None:
     """Run the options wheel trading strategy."""
@@ -147,11 +150,23 @@ def run(
     with open(SYMBOLS_FILE, "r") as file:
         SYMBOLS = [line.strip() for line in file.readlines()]
 
+    # Resolve effective max_risk: CLI flag > config > preset default (80_000)
+    if max_risk is not None:
+        effective_max_risk = max_risk
+    elif screen:
+        effective_max_risk = cfg.max_risk
+    else:
+        try:
+            _risk_cfg = load_config()
+            effective_max_risk = _risk_cfg.max_risk
+        except Exception:
+            effective_max_risk = ScreenerConfig().max_risk
+
     if fresh_start:
         std_logger.info("Running in fresh start mode -- liquidating all positions.")
         client.liquidate_all_positions()
         allowed_symbols = SYMBOLS
-        buying_power = MAX_RISK
+        buying_power = effective_max_risk
     else:
         positions = client.get_positions()
         strat_logger.add_current_positions(positions)
@@ -212,7 +227,7 @@ def run(
                     std_logger.info("No viable covered call found for %s", symbol)
 
         allowed_symbols = list(set(SYMBOLS).difference(states.keys()))
-        buying_power = MAX_RISK - current_risk
+        buying_power = effective_max_risk - current_risk
 
     strat_logger.set_buying_power(buying_power)
     strat_logger.set_allowed_symbols(allowed_symbols)

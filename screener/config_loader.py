@@ -124,11 +124,19 @@ class ScreenerConfig(BaseModel):
     """Top-level screener configuration with nested sections."""
 
     preset: str = "moderate"
+    max_risk: int = 80_000
     fundamentals: FundamentalsConfig = FundamentalsConfig()
     technicals: TechnicalsConfig = TechnicalsConfig()
     earnings: EarningsConfig = EarningsConfig()
     options: OptionsConfig = OptionsConfig()
     sectors: SectorsConfig = SectorsConfig()
+
+    @field_validator("max_risk")
+    @classmethod
+    def max_risk_positive(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("max_risk must be positive")
+        return v
 
     @field_validator("preset")
     @classmethod

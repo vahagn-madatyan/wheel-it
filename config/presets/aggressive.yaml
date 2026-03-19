@@ -1,4 +1,5 @@
 preset: aggressive
+max_risk: 120000
 fundamentals:
   market_cap_min: 500000000
   debt_equity_max: 3.0

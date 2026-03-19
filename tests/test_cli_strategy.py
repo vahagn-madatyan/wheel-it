@@ -28,6 +28,7 @@ def test_strategy_help():
     assert "--log-level" in result.output
     assert "--log-to-file" in result.output
     assert "--screen" in result.output
+    assert "--max-risk" in result.output
 
 
 def test_existing_flags_preserved():
@@ -234,6 +235,64 @@ def test_empty_recommendations_no_crash(
     result = runner.invoke(app, [])
     assert result.exit_code == 0
     mock_broker.market_sell.assert_not_called()
+
+
+@patch("scripts.run_strategy.load_config")
+@patch("scripts.run_strategy.screen_puts", return_value=[])
+@patch("scripts.run_strategy.calculate_risk", return_value=10_000)
+@patch("scripts.run_strategy.update_state", return_value={})
+@patch("scripts.run_strategy.StrategyLogger")
+@patch("scripts.run_strategy.setup_logger")
+@patch("scripts.run_strategy.BrokerClient")
+@patch("builtins.open", mock_open(read_data="AAPL\nMSFT\n"))
+def test_max_risk_cli_flag(
+    mock_broker_cls,
+    mock_setup_logger,
+    mock_strat_logger_cls,
+    mock_update_state,
+    mock_calc_risk,
+    mock_screen_puts,
+    mock_load_config,
+):
+    """--max-risk CLI flag sets buying power to (max_risk - current_risk)."""
+    mock_load_config.return_value = ScreenerConfig()
+    mock_broker = MagicMock()
+    mock_broker.get_positions.return_value = []
+    mock_broker_cls.return_value = mock_broker
+    mock_strat_logger_cls.return_value = MagicMock()
+    mock_setup_logger.return_value = MagicMock()
+
+    result = runner.invoke(app, ["--max-risk", "50000"])
+    assert result.exit_code == 0
+    # buying_power = 50000 - 10000 = 40000 (third positional arg to screen_puts)
+    call_args = mock_screen_puts.call_args
+    assert call_args[0][3] == 40_000
+
+
+@patch("scripts.run_strategy.load_config")
+@patch("scripts.run_strategy.screen_puts", return_value=[])
+@patch("scripts.run_strategy.StrategyLogger")
+@patch("scripts.run_strategy.setup_logger")
+@patch("scripts.run_strategy.BrokerClient")
+@patch("builtins.open", mock_open(read_data="AAPL\nMSFT\n"))
+def test_max_risk_cli_flag_with_fresh_start(
+    mock_broker_cls,
+    mock_setup_logger,
+    mock_strat_logger_cls,
+    mock_screen_puts,
+    mock_load_config,
+):
+    """--max-risk with --fresh-start uses full max_risk as buying power."""
+    mock_load_config.return_value = ScreenerConfig()
+    mock_broker = MagicMock()
+    mock_broker_cls.return_value = mock_broker
+    mock_strat_logger_cls.return_value = MagicMock()
+    mock_setup_logger.return_value = MagicMock()
+
+    result = runner.invoke(app, ["--fresh-start", "--max-risk", "60000"])
+    assert result.exit_code == 0
+    call_args = mock_screen_puts.call_args
+    assert call_args[0][3] == 60_000
 
 
 def test_no_core_execution_imports():
