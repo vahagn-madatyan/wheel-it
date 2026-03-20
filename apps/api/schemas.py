@@ -43,6 +43,7 @@ class PutResultSchema(BaseModel):
     strike: float
     dte: int
     premium: float
+    extrinsic: float
     delta: Optional[float] = None
     oi: int
     spread: float

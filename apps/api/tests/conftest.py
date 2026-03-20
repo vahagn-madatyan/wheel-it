@@ -61,6 +61,7 @@ SAMPLE_PUT = PutRecommendation(
     strike=200.0,
     dte=30,
     premium=3.50,
+    extrinsic=3.50,
     delta=-0.25,
     oi=1500,
     spread=0.03,

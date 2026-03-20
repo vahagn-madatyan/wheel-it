@@ -46,10 +46,11 @@ class PutRecommendation:
     strike: float
     dte: int
     premium: float  # bid price (what seller receives)
+    extrinsic: float  # time value portion of premium
     delta: Optional[float]
     oi: int
     spread: float  # bid/ask spread as fraction
-    annualized_return: float  # annualized return percentage
+    annualized_return: float  # annualized return based on extrinsic premium
 
 
 # ---------------------------------------------------------------------------
@@ -137,16 +138,22 @@ def screen_puts(
     min_exp = today + timedelta(days=dte_min)
     max_exp = today + timedelta(days=dte_max)
 
-    # Step 1: Buying power pre-filter
+    # Step 1: Fetch stock prices for buying power + OTM filtering
+    stock_prices: dict[str, float] = {}
     affordable_symbols = symbols
     if stock_client is not None:
         try:
             req = StockLatestTradeRequest(symbol_or_symbols=symbols)
             latest_trades = stock_client.get_stock_latest_trade(req)
+            stock_prices = {
+                sym: float(latest_trades[sym].price)
+                for sym in symbols
+                if sym in latest_trades
+            }
             affordable_symbols = [
                 sym for sym in symbols
-                if sym in latest_trades
-                and 100 * float(latest_trades[sym].price) <= buying_power
+                if sym in stock_prices
+                and 100 * stock_prices[sym] <= buying_power
             ]
         except Exception:
             logger.debug(
@@ -284,7 +291,19 @@ def screen_puts(
         # Determine underlying symbol
         underlying = contract.underlying_symbol
 
-        ann_return = compute_put_annualized_return(bid, strike, dte)
+        # OTM filter — puts must have strike below current stock price
+        stock_price = stock_prices.get(underlying)
+        if stock_price is not None and strike >= stock_price:
+            continue
+
+        # Compute extrinsic (time value) premium for ranking
+        intrinsic = max(strike - stock_price, 0) if stock_price is not None else 0
+        extrinsic = bid - intrinsic
+
+        if extrinsic <= 0:
+            continue
+
+        ann_return = compute_put_annualized_return(extrinsic, strike, dte)
         if ann_return is None:
             continue
 
@@ -295,6 +314,7 @@ def screen_puts(
                 strike=strike,
                 dte=dte,
                 premium=bid,
+                extrinsic=extrinsic,
                 delta=delta,
                 oi=oi,
                 spread=spread,
@@ -367,6 +387,7 @@ def render_put_results_table(
     table.add_column("Strike", justify="right")
     table.add_column("DTE", justify="right")
     table.add_column("Premium", justify="right")
+    table.add_column("Extrinsic", justify="right")
     table.add_column("Delta", justify="right")
     table.add_column("OI", justify="right")
     table.add_column("Spread", justify="right")
@@ -384,6 +405,7 @@ def render_put_results_table(
             f"${rec.strike:.2f}",
             str(rec.dte),
             f"${rec.premium:.2f}",
+            f"${rec.extrinsic:.2f}",
             delta_str,
             f"{rec.oi:,}",
             spread_str,

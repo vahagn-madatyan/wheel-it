@@ -209,8 +209,9 @@ Find your install path with `which wheelit`.
 ### Strategy Details
 
 - **Stock filtering** — only trades symbols where 100 shares fit within buying power
+- **OTM enforcement** — puts must have strike < current stock price (no ITM or ATM)
 - **Option filtering** — delta range, open interest, yield, bid/ask spread
-- **Scoring** — `(1 - |delta|) * (250 / (DTE + 5)) * (bid / strike)` — annualized return adjusted for assignment probability
+- **Extrinsic ranking** — annualized return uses time value (extrinsic premium) only, not total premium, so ITM contracts can't inflate their ranking with intrinsic value
 - **Diversification** — one contract per underlying symbol
 - **Call strike floor** — covered calls enforce strike >= cost basis
 

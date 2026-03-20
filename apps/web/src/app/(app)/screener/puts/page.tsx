@@ -64,6 +64,7 @@ interface PutResult {
   strike: number;
   dte: number;
   premium: number;
+  extrinsic: number;
   delta: number | null;
   oi: number;
   spread: number;

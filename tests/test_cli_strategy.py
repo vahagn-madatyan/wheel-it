@@ -189,6 +189,7 @@ def test_strategy_sells_put_recommendations(
         strike=170.0,
         dte=30,
         premium=2.50,
+        extrinsic=2.50,
         delta=-0.22,
         oi=500,
         spread=0.04,

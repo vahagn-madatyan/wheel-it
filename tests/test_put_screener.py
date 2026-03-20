@@ -88,6 +88,7 @@ class TestPutRecommendation:
             strike=170.0,
             dte=30,
             premium=2.50,
+            extrinsic=2.50,
             delta=-0.25,
             oi=500,
             spread=0.04,
@@ -98,6 +99,7 @@ class TestPutRecommendation:
         assert rec.strike == 170.0
         assert rec.dte == 30
         assert rec.premium == 2.50
+        assert rec.extrinsic == 2.50
         assert rec.delta == -0.25
         assert rec.oi == 500
         assert rec.spread == 0.04
@@ -110,6 +112,7 @@ class TestPutRecommendation:
             strike=170.0,
             dte=30,
             premium=2.50,
+            extrinsic=2.50,
             delta=None,
             oi=500,
             spread=0.04,
@@ -125,6 +128,7 @@ class TestPutRecommendation:
             strike=170.0,
             dte=30,
             premium=2.50,
+            extrinsic=2.50,
             delta=-0.25,
             oi=500,
             spread=0.04,
@@ -136,6 +140,7 @@ class TestPutRecommendation:
             strike=400.0,
             dte=45,
             premium=5.00,
+            extrinsic=5.00,
             delta=-0.20,
             oi=1000,
             spread=0.02,
@@ -279,7 +284,7 @@ class TestScreenPuts:
     def test_buying_power_excludes_expensive_symbols(self):
         """Symbols where 100 * price > buying_power are excluded."""
         exp = self._exp_date()
-        contract = _make_mock_contract("CHEAP250P", 45.0, exp, underlying="CHEAP")
+        contract = _make_mock_contract("CHEAP250P", 40.0, exp, underlying="CHEAP")
         snap = _make_mock_snapshot(1.0, 1.10, delta=-0.20)
 
         tc, oc, sc = _mock_clients(
@@ -287,7 +292,7 @@ class TestScreenPuts:
             snapshots={"CHEAP250P": snap},
         )
         sc.get_stock_latest_trade.return_value = {
-            "CHEAP": _make_mock_trade(45.0),   # 100*45 = 4500 <= 5000 ✓
+            "CHEAP": _make_mock_trade(45.0),   # 100*45 = 4500 <= 5000 ✓; strike 40 < 45 OTM ✓
             "EXPENSIVE": _make_mock_trade(100.0),  # 100*100 = 10000 > 5000 ✗
         }
 
@@ -391,7 +396,7 @@ class TestScreenPuts:
             contracts=[contract],
             snapshots={"AAPL250P": snap},
         )
-        sc.get_stock_latest_trade.return_value = {"AAPL": _make_mock_trade(170.0)}
+        sc.get_stock_latest_trade.return_value = {"AAPL": _make_mock_trade(175.0)}
 
         result = screen_puts(tc, oc, ["AAPL"], 50000.0, stock_client=sc)
         assert len(result) == 1
@@ -438,7 +443,7 @@ class TestScreenPuts:
             contracts=[contract],
             snapshots={"AAPL250P": snap},
         )
-        sc.get_stock_latest_trade.return_value = {"AAPL": _make_mock_trade(170.0)}
+        sc.get_stock_latest_trade.return_value = {"AAPL": _make_mock_trade(175.0)}
 
         result = screen_puts(tc, oc, ["AAPL"], 50000.0, stock_client=sc)
         assert len(result) == 1
@@ -454,7 +459,7 @@ class TestScreenPuts:
             contracts=[contract],
             snapshots={"AAPL250P": snap},
         )
-        sc.get_stock_latest_trade.return_value = {"AAPL": _make_mock_trade(170.0)}
+        sc.get_stock_latest_trade.return_value = {"AAPL": _make_mock_trade(175.0)}
 
         result = screen_puts(tc, oc, ["AAPL"], 50000.0, stock_client=sc)
         assert len(result) == 1
@@ -624,6 +629,96 @@ class TestScreenPuts:
         result = screen_puts(tc, oc, ["AAPL"], 50000.0, stock_client=sc)
         assert result == []
 
+    # --- OTM filter ---
+
+    def test_itm_put_filtered_out(self):
+        """ITM put (strike > stock price) is rejected."""
+        exp = self._exp_date()
+        contract = _make_mock_contract("AAPL250P", 180.0, exp, open_interest=500, underlying="AAPL")
+        snap = _make_mock_snapshot(12.0, 12.20, delta=-0.20)
+
+        tc, oc, sc = _mock_clients(
+            contracts=[contract],
+            snapshots={"AAPL250P": snap},
+        )
+        sc.get_stock_latest_trade.return_value = {"AAPL": _make_mock_trade(170.0)}  # strike 180 > price 170
+
+        result = screen_puts(tc, oc, ["AAPL"], 50000.0, stock_client=sc)
+        assert result == []
+
+    def test_atm_put_filtered_out(self):
+        """ATM put (strike == stock price) is rejected."""
+        exp = self._exp_date()
+        contract = _make_mock_contract("AAPL250P", 170.0, exp, open_interest=500, underlying="AAPL")
+        snap = _make_mock_snapshot(3.0, 3.10, delta=-0.20)
+
+        tc, oc, sc = _mock_clients(
+            contracts=[contract],
+            snapshots={"AAPL250P": snap},
+        )
+        sc.get_stock_latest_trade.return_value = {"AAPL": _make_mock_trade(170.0)}  # strike == price
+
+        result = screen_puts(tc, oc, ["AAPL"], 50000.0, stock_client=sc)
+        assert result == []
+
+    def test_otm_put_passes(self):
+        """OTM put (strike < stock price) passes the filter."""
+        exp = self._exp_date()
+        contract = _make_mock_contract("AAPL250P", 165.0, exp, open_interest=500, underlying="AAPL")
+        snap = _make_mock_snapshot(2.0, 2.10, delta=-0.20)
+
+        tc, oc, sc = _mock_clients(
+            contracts=[contract],
+            snapshots={"AAPL250P": snap},
+        )
+        sc.get_stock_latest_trade.return_value = {"AAPL": _make_mock_trade(175.0)}  # strike 165 < price 175
+
+        result = screen_puts(tc, oc, ["AAPL"], 50000.0, stock_client=sc)
+        assert len(result) == 1
+        assert result[0].strike == 165.0
+
+    def test_no_stock_price_skips_otm_filter(self):
+        """Without stock_client, OTM filter is skipped (backward compat)."""
+        exp = self._exp_date()
+        contract = _make_mock_contract("AAPL250P", 170.0, exp, open_interest=500, underlying="AAPL")
+        snap = _make_mock_snapshot(2.0, 2.10, delta=-0.20)
+
+        tc, oc, _ = _mock_clients(
+            contracts=[contract],
+            snapshots={"AAPL250P": snap},
+        )
+
+        result = screen_puts(tc, oc, ["AAPL"], 50000.0, stock_client=None)
+        assert len(result) == 1
+
+    def test_extrinsic_used_for_ranking(self):
+        """OTM puts rank by extrinsic premium, not total premium."""
+        exp = self._exp_date()
+        # Both OTM: stock at 180
+        # Contract A: strike 175, bid 3.0 → extrinsic = 3.0 (all extrinsic)
+        # Contract B: strike 170, bid 2.5 → extrinsic = 2.5 (all extrinsic)
+        c1 = _make_mock_contract("AAPL250P175", 175.0, exp, open_interest=500, underlying="AAPL")
+        c2 = _make_mock_contract("MSFT250P170", 170.0, exp, open_interest=500, underlying="MSFT")
+
+        snap1 = _make_mock_snapshot(3.0, 3.10, delta=-0.20)
+        snap2 = _make_mock_snapshot(2.5, 2.60, delta=-0.20)
+
+        tc, oc, sc = _mock_clients(
+            contracts=[c1, c2],
+            snapshots={"AAPL250P175": snap1, "MSFT250P170": snap2},
+        )
+        sc.get_stock_latest_trade.return_value = {
+            "AAPL": _make_mock_trade(180.0),
+            "MSFT": _make_mock_trade(180.0),
+        }
+
+        result = screen_puts(tc, oc, ["AAPL", "MSFT"], 50000.0, stock_client=sc)
+        assert len(result) == 2
+        # AAPL has higher extrinsic/strike ratio → ranked first
+        assert result[0].underlying == "AAPL"
+        assert result[0].extrinsic == 3.0
+        assert result[1].extrinsic == 2.5
+
     # --- Full pipeline ---
 
     def test_full_pipeline_happy_path(self):
@@ -648,6 +743,7 @@ class TestScreenPuts:
         assert rec.strike == 170.0
         assert rec.dte == 30
         assert rec.premium == 2.50
+        assert rec.extrinsic == 2.50  # OTM: all premium is extrinsic
         assert rec.delta == -0.22
         assert rec.oi == 500
         assert rec.annualized_return == compute_put_annualized_return(2.50, 170.0, 30)
@@ -682,6 +778,7 @@ class TestRenderPutResultsTable:
                 strike=170.0,
                 dte=30,
                 premium=2.50,
+                extrinsic=2.50,
                 delta=-0.22,
                 oi=500,
                 spread=0.04,
@@ -694,6 +791,7 @@ class TestRenderPutResultsTable:
         assert "Strike" in output
         assert "DTE" in output
         assert "Premium" in output
+        assert "Extrinsic" in output
         assert "Delta" in output
         assert "OI" in output
         assert "Spread" in output
@@ -709,6 +807,7 @@ class TestRenderPutResultsTable:
                 strike=170.0,
                 dte=30,
                 premium=2.50,
+                extrinsic=2.50,
                 delta=-0.22,
                 oi=500,
                 spread=0.04,
@@ -720,6 +819,7 @@ class TestRenderPutResultsTable:
                 strike=400.0,
                 dte=45,
                 premium=5.00,
+                extrinsic=5.00,
                 delta=-0.20,
                 oi=1000,
                 spread=0.02,
@@ -738,6 +838,7 @@ class TestRenderPutResultsTable:
                 strike=170.0,
                 dte=30,
                 premium=2.50,
+                extrinsic=2.50,
                 delta=None,
                 oi=500,
                 spread=0.04,
@@ -789,11 +890,11 @@ class TestPresetThresholds:
         snap = _make_mock_snapshot(2.0, 2.10, delta=-0.20)
 
         tc_m, oc_m, sc_m = _mock_clients(contracts=[contract], snapshots={"AAPL250P": snap})
-        sc_m.get_stock_latest_trade.return_value = {"AAPL": _make_mock_trade(170.0)}
+        sc_m.get_stock_latest_trade.return_value = {"AAPL": _make_mock_trade(175.0)}
         result_moderate = screen_puts(tc_m, oc_m, ["AAPL"], 50000.0, config=moderate, stock_client=sc_m)
 
         tc_c, oc_c, sc_c = _mock_clients(contracts=[contract], snapshots={"AAPL250P": snap})
-        sc_c.get_stock_latest_trade.return_value = {"AAPL": _make_mock_trade(170.0)}
+        sc_c.get_stock_latest_trade.return_value = {"AAPL": _make_mock_trade(175.0)}
         result_conservative = screen_puts(tc_c, oc_c, ["AAPL"], 50000.0, config=conservative, stock_client=sc_c)
 
         assert len(result_moderate) == 1

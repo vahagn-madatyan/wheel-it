@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2026-03-20
+
+### Fixed
+
+- **Put screener selling ITM options** — the put screener had no explicit OTM check and relied solely on delta filtering. Contracts with missing greeks data bypassed the delta filter entirely (D039 rule), allowing deep ITM puts to be selected. Added a hard `strike < stock_price` gate that rejects any ITM or ATM put.
+- **Ranking inflated by intrinsic value** — annualized return was computed on total premium (`bid`), which includes intrinsic value for ITM puts. ITM contracts with high intrinsic value ranked above genuinely profitable OTM contracts. Now uses extrinsic (time value) premium only: `extrinsic = bid - max(strike - stock_price, 0)`.
+
+### Added
+
+- **`extrinsic` field on `PutRecommendation`** — shows how much of the premium is time value vs intrinsic. Visible in the CLI table ("Extrinsic" column) and API response.
+
 ## [0.3.0] - 2026-03-19
 
 ### Added
