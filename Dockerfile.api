@@ -25,7 +25,6 @@ COPY config/ config/
 COPY apps/ apps/
 COPY premium/ premium/
 COPY scripts/ scripts/
-COPY logging/ logging/
 
 # ---- Runtime stage ----
 FROM python:3.12-slim

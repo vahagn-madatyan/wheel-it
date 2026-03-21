@@ -12,6 +12,7 @@ services:
       - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET}
       - APP_ENCRYPTION_SECRET=${APP_ENCRYPTION_SECRET}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
     depends_on:
       - redis
 
@@ -22,6 +23,7 @@ services:
       args:
         - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
         - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        - API_URL=http://api:8000
     ports:
       - "3000:3000"
     environment:
