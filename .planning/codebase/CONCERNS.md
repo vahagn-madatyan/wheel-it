@@ -11,10 +11,10 @@
 - Fix approach: Add unit tests for pure functions in `core/strategy.py` (filter, score, select). Add integration tests for `core/state_manager.py` with mock positions. Mock `BrokerClient` for `core/execution.py` tests.
 
 **stdlib `logging` Module Shadowing:**
-- Issue: The project has a `logging/` package that shadows Python's built-in `logging` module. This is acknowledged in CLAUDE.md but remains a fragile design. Any new code that does `import logging` from the wrong context will get the custom package instead of stdlib.
-- Files: `logging/__init__.py`, `logging/logger_setup.py`, `logging/strategy_logger.py`
-- Impact: Confusing for new contributors, prone to subtle import bugs, and prevents standard `import logging` usage in new modules.
-- Fix approach: Rename the `logging/` package to something like `log_config/` or `strategy_logging/` to avoid shadowing stdlib.
+- Issue: ~~The project has a `logging/` package that shadows Python's built-in `logging` module.~~ **Fixed.** The package is now `strategy_logging/`, so `import logging` is stdlib.
+- Files: `strategy_logging/__init__.py`, `strategy_logging/logger_setup.py`, `strategy_logging/strategy_logger.py`
+- Impact: A pip/pipx install previously failed with `ModuleNotFoundError: logging.logger_setup` because stdlib always precedes `site-packages` on `sys.path`.
+- Fix approach: Rename applied (`logging/` → `strategy_logging/`). The stdlib-reexport shim in `__init__.py` was deleted.
 
 **Unpinned Dependencies:**
 - Issue: `pyproject.toml` specifies loose version constraints (`pandas>=1.5`, `numpy>=1.23`, `alpaca-py` with no version). No lockfile exists.

@@ -20,7 +20,7 @@ wheeely/
 │   ├── strategy.py          # Pure option filtering, scoring, selection logic
 │   ├── user_agent_mixin.py  # Mixin to set custom User-Agent on Alpaca clients
 │   └── utils.py             # OCC symbol parsing, timestamp helpers
-├── logging/                 # Logging utilities (shadows Python stdlib logging)
+├── strategy_logging/        # Runtime + JSON strategy logs (does not shadow stdlib)
 │   ├── __init__.py
 │   ├── logger_setup.py      # Python stdlib logger configuration
 │   └── strategy_logger.py   # JSON strategy decision logger (StrategyLogger)
@@ -51,11 +51,11 @@ wheeely/
 - Contains: Broker API wrapper, strategy algorithms, execution orchestration, state management, CLI parsing, utilities
 - Key files: `broker_client.py` (API facade), `execution.py` (trade pipelines), `strategy.py` (filtering/scoring), `state_manager.py` (wheel state)
 
-**`logging/`:**
+**`strategy_logging/`:**
 - Purpose: Logging configuration and structured strategy logging
 - Contains: Two separate logging systems
 - Key files: `logger_setup.py` (stdlib logger), `strategy_logger.py` (JSON audit logger)
-- **Important:** This package shadows Python's stdlib `logging`. Internal imports work because `__init__.py` is empty and `logger_setup.py` imports `logging` which resolves to stdlib within the package context.
+- Named to avoid shadowing Python's stdlib `logging` package.
 
 **`models/`:**
 - Purpose: Data model definitions for normalizing external API objects
@@ -93,8 +93,8 @@ wheeely/
 - `models/contract.py`: `Contract` dataclass with constructors `from_contract()`, `from_contract_snapshot()`, `from_dict()`
 
 **Logging:**
-- `logging/logger_setup.py`: `setup_logger()` -- configures Python stdlib logger
-- `logging/strategy_logger.py`: `StrategyLogger` class -- JSON audit trail
+- `strategy_logging/logger_setup.py`: `setup_logger()` -- configures Python stdlib logger
+- `strategy_logging/strategy_logger.py`: `StrategyLogger` class -- JSON audit trail
 
 **Utilities:**
 - `core/utils.py`: `parse_option_symbol()`, `get_ny_timestamp()`
@@ -109,7 +109,7 @@ wheeely/
 - Top-level metadata: `UPPERCASE.md` (README, LICENSE, CLAUDE)
 
 **Directories:**
-- `snake_case` for all packages: `core/`, `config/`, `logging/`, `models/`, `scripts/`, `reports/`
+- `snake_case` for all packages: `core/`, `config/`, `strategy_logging/`, `models/`, `scripts/`, `reports/`
 
 **Classes:**
 - `PascalCase`: `BrokerClient`, `Contract`, `StrategyLogger`, `UserAgentMixin`
@@ -142,7 +142,7 @@ wheeely/
 
 **New Utility Functions:**
 - General utilities: `core/utils.py`
-- Logging-related: `logging/` package
+- Logging-related: `strategy_logging/` package
 
 **New Tradeable Symbols:**
 - Append ticker to `config/symbol_list.txt` (one per line)

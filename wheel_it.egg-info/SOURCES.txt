@@ -34,9 +34,9 @@ core/cli_common.py
 core/state_manager.py
 core/user_agent_mixin.py
 core/utils.py
-logging/__init__.py
-logging/logger_setup.py
-logging/strategy_logger.py
+strategy_logging/__init__.py
+strategy_logging/logger_setup.py
+strategy_logging/strategy_logger.py
 models/__init__.py
 models/screened_stock.py
 screener/__init__.py
