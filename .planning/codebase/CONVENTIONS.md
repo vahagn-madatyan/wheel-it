@@ -94,10 +94,10 @@
 
 **Framework:** Python stdlib `logging` module
 
-**IMPORTANT:** The project has a `logging/` package that shadows Python's stdlib `logging`. Inside the custom package, stdlib `logging` is imported normally (it works because Python resolves the stdlib module when importing from within the package). External modules use `from logging.logger_setup import setup_logger`.
+Logging helpers live in `strategy_logging/` so they do not shadow Python's stdlib `logging`. External modules use `from strategy_logging.logger_setup import setup_logger`.
 
 **Logger hierarchy:**
-- Root strategy logger: `logging.getLogger("strategy")` (configured in `logging/logger_setup.py`)
+- Root strategy logger: `logging.getLogger("strategy")` (configured in `strategy_logging/logger_setup.py`)
 - Child loggers per module: `logging.getLogger(f"strategy.{__name__}")` (see `core/execution.py`)
 
 **Patterns:**
@@ -108,7 +108,7 @@
 - File format: `%(asctime)s - %(name)s - %(levelname)s - %(message)s`
 
 **Strategy Logger (separate system):**
-- `logging/strategy_logger.py` provides `StrategyLogger` class for structured JSON logging of strategy decisions
+- `strategy_logging/strategy_logger.py` provides `StrategyLogger` class for structured JSON logging of strategy decisions
 - Writes to `logs/strategy_log.json` as an appended JSON array
 - All methods check `self.enabled` before writing (no-op when disabled)
 

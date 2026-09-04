@@ -5,7 +5,7 @@ This project is a Python CLI application with three entrypoints built around two
 - Wheel strategy execution and order placement
 - Stock and covered-call screening
 
-The diagram below reflects the current code in `scripts/`, `core/`, `screener/`, `models/`, `config/`, and `logging/`.
+The diagram below reflects the current code in `scripts/`, `core/`, `screener/`, `models/`, `config/`, and `strategy_logging/`.
 
 ```mermaid
 ---
@@ -50,8 +50,8 @@ flowchart LR
     subgraph modelsLogs["Models & Logging"]
         contract["models/contract.py<br/>option contract model"]
         screened["models/screened_stock.py<br/>screening result model"]
-        runtimeLogger["logging/logger_setup.py<br/>console/file logger"]
-        strategyLogger["logging/strategy_logger.py<br/>JSON strategy log"]
+        runtimeLogger["strategy_logging/logger_setup.py<br/>console/file logger"]
+        strategyLogger["strategy_logging/strategy_logger.py<br/>JSON strategy log"]
     end
 
     subgraph external["External Services"]

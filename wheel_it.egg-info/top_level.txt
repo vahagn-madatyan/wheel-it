@@ -1,7 +1,7 @@
 apps
 config
 core
-logging
+strategy_logging
 logs
 models
 reports

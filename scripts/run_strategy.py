@@ -23,8 +23,8 @@ from config.credentials import ALPACA_API_KEY, ALPACA_SECRET_KEY, IS_PAPER
 from config.credentials import require_finnhub_key
 from core.broker_client import BrokerClient
 from core.state_manager import update_state, calculate_risk
-from logging.logger_setup import setup_logger
-from logging.strategy_logger import StrategyLogger
+from strategy_logging.logger_setup import setup_logger
+from strategy_logging.strategy_logger import StrategyLogger
 from screener.call_screener import screen_calls
 from screener.config_loader import ScreenerConfig, format_validation_errors, load_config
 from screener.display import (

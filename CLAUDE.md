@@ -58,11 +58,11 @@ python -m pytest tests/ -v          # verbose output
 - **`screener/display.py`** — Rich table display for screener results, filter summaries, progress indicators.
 - **`config/params.py`** — Strategy tuning constants: `MAX_RISK` (max dollar risk), `DELTA_MIN`/`DELTA_MAX` (delta range for option selection).
 - **`config/symbol_list.txt`** — One ticker per line. Only these symbols are traded.
-- **`logging/strategy_logger.py`** — JSON logger for strategy decisions (separate from Python's `logging`). Note: the `logging/` package shadows Python's stdlib `logging` — imports use `from logging.logger_setup import ...` for the custom module.
+- **`strategy_logging/strategy_logger.py`** — JSON logger for strategy decisions (separate from Python's `logging`).
 
 ### Important Patterns
 
-- The project shadows Python's `logging` module with its own `logging/` package. The custom `logger_setup.py` internally imports `logging` (stdlib) via the package's `__init__.py`.
+- Logging helpers live in `strategy_logging/` so they never shadow Python's stdlib `logging` package.
 - Both screeners (`screen_puts()` and `screen_calls()`) use Alpaca SDK clients directly (not `BrokerClient` wrapper methods) for contract fetching and snapshot batching.
 - `screen_puts()` paginates multi-symbol contract fetches (1000 per page) and batches snapshot requests (100 per batch).
 - Options are filtered to one contract per underlying symbol to promote diversification.
